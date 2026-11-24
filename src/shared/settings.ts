@@ -1,10 +1,14 @@
 import { BUILT_IN_SITES } from '../detection/distraction-rules';
 import { normalizeDomain } from '../detection/website-detector';
 import {
+  BREAK_MINUTES_MAX,
+  BREAK_MINUTES_MIN,
   DEFAULT_DELAY_SECONDS,
   DEFAULT_MAX_SPEED_MULTIPLIER,
   DELAY_MAX_SECONDS,
   DELAY_MIN_SECONDS,
+  FOCUS_MINUTES_MAX,
+  FOCUS_MINUTES_MIN,
   MAX_CUSTOM_SITES,
   MAX_NAME_LENGTH,
   SPEED_MULTIPLIER_MAX,
@@ -13,16 +17,19 @@ import {
   SPEED_SETTING_MIN,
 } from './constants';
 import {
+  ALL_CHARACTER_COLORS,
   ANIMATION_INTENSITIES,
-  CHARACTER_COLORS,
   CHARACTER_DESIGNS,
   CHARACTER_SIZES,
+  DELAY_PRESETS,
   ESCALATION_CURVES,
   REDUCED_MOTION_PREFERENCES,
   RESET_FREQUENCIES,
   SWITCH_AWAY_BEHAVIORS,
   type BehaviorSettings,
   type CharacterSettings,
+  type DelayConfig,
+  type FocusSettings,
   type Settings,
   type SiteRule,
 } from './types';
@@ -48,16 +55,28 @@ export const DEFAULT_BEHAVIOR: BehaviorSettings = {
   switchAway: 'pause',
 };
 
+export const DEFAULT_FOCUS: FocusSettings = {
+  focusMinutes: 25,
+  shortBreakMinutes: 5,
+  longBreakMinutes: 15,
+  sessionsBeforeLongBreak: 4,
+  autoStartBreaks: false,
+  relaxDuringBreaks: true,
+  // Off until the user turns it on (which asks Chrome for the optional permission).
+  notifications: false,
+};
+
 export function defaultSettings(): Settings {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     enabled: true,
     autoClose: false,
     delaySeconds: DEFAULT_DELAY_SECONDS,
     defaultPause: '15m',
-    sites: BUILT_IN_SITES.map((s) => ({ ...s, domains: [...s.domains] })),
+    sites: BUILT_IN_SITES.map((s) => ({ ...s, domains: [...s.domains], delay: { ...s.delay } })),
     character: { ...DEFAULT_CHARACTER },
     behavior: { ...DEFAULT_BEHAVIOR },
+    focus: { ...DEFAULT_FOCUS },
     onboardingComplete: false,
   };
 }
@@ -103,10 +122,82 @@ function cleanName(value: unknown, fallback: string): string {
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
-function validateDelayOverride(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  return num(value, DELAY_MIN_SECONDS, DELAY_MAX_SECONDS, DEFAULT_DELAY_SECONDS, 1);
+// ---- countdown delay config ---------------------------------------------------
+
+export type ParseResult = { ok: true; value: number } | { ok: false; error: string };
+
+/** Parses what the user typed into a custom-delay field. */
+export function parseCustomDelay(input: string): ParseResult {
+  return parseWhole(input, DELAY_MIN_SECONDS, DELAY_MAX_SECONDS, 'seconds');
 }
+
+/** Parses a focus/break length the user typed. */
+export function parseMinutes(input: string, min: number, max: number): ParseResult {
+  return parseWhole(input, min, max, 'minutes');
+}
+
+function parseWhole(input: string, min: number, max: number, unit: string): ParseResult {
+  const text = input.trim();
+  if (text === '') return { ok: false, error: `Enter a number of ${unit}.` };
+  if (!/^\d+$/.test(text)) return { ok: false, error: `Use a whole number of ${unit}.` };
+  const value = Number(text);
+  if (value < min || value > max) {
+    return { ok: false, error: `Choose between ${min} and ${max} ${unit}.` };
+  }
+  return { ok: true, value };
+}
+
+function validSeconds(v: unknown): v is number {
+  return (
+    typeof v === 'number' && Number.isInteger(v) && v >= DELAY_MIN_SECONDS && v <= DELAY_MAX_SECONDS
+  );
+}
+
+const isPreset = (seconds: number) => (DELAY_PRESETS as readonly number[]).includes(seconds);
+
+/** A DelayConfig for an exact number of seconds (preset if it is one, otherwise custom). */
+export function delayFromSeconds(seconds: number): DelayConfig {
+  return isPreset(seconds) ? { mode: 'preset', seconds } : { mode: 'custom', seconds };
+}
+
+/**
+ * Validates a stored delay config. Also accepts the v1 format (`delaySeconds`:
+ * number | null) so per-site overrides survive the upgrade.
+ */
+export function validateDelay(raw: unknown, legacySeconds?: unknown): DelayConfig {
+  if (isRecord(raw)) {
+    if (raw.mode === 'inherit') return { mode: 'inherit' };
+    if (raw.mode === 'preset' && validSeconds(raw.seconds) && isPreset(raw.seconds)) {
+      return { mode: 'preset', seconds: raw.seconds };
+    }
+    if ((raw.mode === 'custom' || raw.mode === 'preset') && validSeconds(raw.seconds)) {
+      return { mode: 'custom', seconds: raw.seconds };
+    }
+    return { mode: 'inherit' };
+  }
+  if (typeof legacySeconds === 'number' && Number.isFinite(legacySeconds)) {
+    const clamped = Math.round(
+      Math.min(DELAY_MAX_SECONDS, Math.max(DELAY_MIN_SECONDS, legacySeconds)),
+    );
+    return delayFromSeconds(clamped);
+  }
+  return { mode: 'inherit' };
+}
+
+/** The effective countdown for a site, in seconds. */
+export function siteDelaySeconds(
+  settings: Pick<Settings, 'delaySeconds'>,
+  site: Pick<SiteRule, 'delay'>,
+): number {
+  return site.delay.mode === 'inherit' ? settings.delaySeconds : site.delay.seconds;
+}
+
+/** Effective countdown for a site in ms. */
+export function baseDelayMs(settings: Settings, site: SiteRule): number {
+  return siteDelaySeconds(settings, site) * 1000;
+}
+
+// ---- sites ------------------------------------------------------------------------
 
 function validateCustomSite(raw: unknown): SiteRule | null {
   if (!isRecord(raw)) return null;
@@ -124,7 +215,7 @@ function validateCustomSite(raw: unknown): SiteRule | null {
     domains: unique,
     enabled: bool(raw.enabled, true),
     color: typeof raw.color === 'string' && HEX_RE.test(raw.color) ? raw.color : '#8A8F98',
-    delaySeconds: validateDelayOverride(raw.delaySeconds),
+    delay: validateDelay(raw.delay, raw.delaySeconds),
     builtIn: false,
   };
 }
@@ -140,7 +231,7 @@ function validateSites(raw: unknown): SiteRule[] {
       ...site,
       domains: [...site.domains],
       enabled: bool(saved?.enabled, site.enabled),
-      delaySeconds: saved ? validateDelayOverride(saved.delaySeconds) : site.delaySeconds,
+      delay: saved ? validateDelay(saved.delay, saved.delaySeconds) : { ...site.delay },
     };
   });
 
@@ -159,18 +250,19 @@ function validateSites(raw: unknown): SiteRule[] {
 }
 
 /**
- * Turns anything read from storage (possibly partial, stale or corrupted) into a
- * complete, valid Settings object. Unknown keys are dropped; bad values fall back
- * to defaults; numbers are clamped into their allowed ranges.
+ * Turns anything read from storage (possibly partial, stale, corrupted, or the v1
+ * schema) into a complete, valid v2 Settings object. Unknown keys are dropped;
+ * bad values fall back to defaults; numbers are clamped into their allowed ranges.
  */
 export function validateSettings(raw: unknown): Settings {
   const d = defaultSettings();
   if (!isRecord(raw)) return d;
   const c = isRecord(raw.character) ? raw.character : {};
   const b = isRecord(raw.behavior) ? raw.behavior : {};
+  const f = isRecord(raw.focus) ? raw.focus : {};
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     enabled: bool(raw.enabled, d.enabled),
     autoClose: bool(raw.autoClose, d.autoClose),
     delaySeconds: num(raw.delaySeconds, DELAY_MIN_SECONDS, DELAY_MAX_SECONDS, d.delaySeconds, 1),
@@ -179,7 +271,7 @@ export function validateSettings(raw: unknown): Settings {
     onboardingComplete: bool(raw.onboardingComplete, d.onboardingComplete),
     character: {
       design: oneOf(c.design, CHARACTER_DESIGNS, d.character.design),
-      color: oneOf(c.color, CHARACTER_COLORS, d.character.color),
+      color: oneOf(c.color, ALL_CHARACTER_COLORS, d.character.color),
       size: oneOf(c.size, CHARACTER_SIZES, d.character.size),
       intensity: oneOf(c.intensity, ANIMATION_INTENSITIES, d.character.intensity),
       name: cleanName(c.name, d.character.name),
@@ -202,6 +294,39 @@ export function validateSettings(raw: unknown): Settings {
       protectAudible: bool(b.protectAudible, d.behavior.protectAudible),
       switchAway: oneOf(b.switchAway, SWITCH_AWAY_BEHAVIORS, d.behavior.switchAway),
     },
+    focus: {
+      focusMinutes: num(
+        f.focusMinutes,
+        FOCUS_MINUTES_MIN,
+        FOCUS_MINUTES_MAX,
+        d.focus.focusMinutes,
+        1,
+      ),
+      shortBreakMinutes: num(
+        f.shortBreakMinutes,
+        BREAK_MINUTES_MIN,
+        BREAK_MINUTES_MAX,
+        d.focus.shortBreakMinutes,
+        1,
+      ),
+      longBreakMinutes: num(
+        f.longBreakMinutes,
+        BREAK_MINUTES_MIN,
+        BREAK_MINUTES_MAX,
+        d.focus.longBreakMinutes,
+        1,
+      ),
+      sessionsBeforeLongBreak: num(
+        f.sessionsBeforeLongBreak,
+        2,
+        8,
+        d.focus.sessionsBeforeLongBreak,
+        1,
+      ),
+      autoStartBreaks: bool(f.autoStartBreaks, d.focus.autoStartBreaks),
+      relaxDuringBreaks: bool(f.relaxDuringBreaks, d.focus.relaxDuringBreaks),
+      notifications: bool(f.notifications, d.focus.notifications),
+    },
   };
 }
 
@@ -214,9 +339,4 @@ export function createCustomSite(input: string, existing: readonly SiteRule[]): 
   );
   if (taken) return null;
   return validateCustomSite({ name: domain, domains: [domain], enabled: true });
-}
-
-/** Effective countdown for a site in ms (per-site override or the global delay). */
-export function baseDelayMs(settings: Settings, site: SiteRule): number {
-  return (site.delaySeconds ?? settings.delaySeconds) * 1000;
 }

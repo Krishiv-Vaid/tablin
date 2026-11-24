@@ -25,7 +25,9 @@ describe('countdown', () => {
   it('respects per-site delay overrides', async () => {
     const h = await harness((s) => ({
       ...s,
-      sites: s.sites.map((x) => (x.id === 'youtube' ? { ...x, delaySeconds: 30 } : x)),
+      sites: s.sites.map((x) =>
+        x.id === 'youtube' ? { ...x, delay: { mode: 'preset' as const, seconds: 30 } } : x,
+      ),
     }));
     h.tabs.add({ id: 1, url: YT, active: true });
     expect(counting(await h.manager.handlePageReady(1, YT))).toBe(h.clock.t + 30_000);
@@ -418,12 +420,13 @@ describe('user controls', () => {
 
   it('timed pauses expire on their own and start a new focus session', async () => {
     const h = await harness();
-    const before = (await h.manager.status()).totalFocusSessions;
+    await h.manager.status();
+    const before = (await h.store.getStats()).totalWatchSessions;
     await h.manager.pause('15m');
     h.clock.advance(15 * 60_000 + 1);
     const s = await h.manager.status();
     expect(s.pause).toBeNull();
-    expect(s.totalFocusSessions).toBe(before + 1);
+    expect((await h.store.getStats()).totalWatchSessions).toBe(before + 1);
   });
 
   it('session pause lasts until the browser restarts', async () => {
@@ -480,11 +483,14 @@ describe('user controls', () => {
     await h.manager.handlePageReady(1, YT);
     const s = await h.manager.status();
     expect(s.activeTab).toEqual({
+      siteId: 'youtube',
       siteName: 'YouTube',
       phase: 'counting',
       dueAt: h.clock.t + 12_000,
+      delaySeconds: 12,
     });
     expect(s.autoClose).toBe(false);
-    expect(s.streak).toBe(1);
+    // V2: the streak counts focus-session days, not merely days Tablin was on.
+    expect(s.streak).toMatchObject({ current: 0, todayDone: false });
   });
 });

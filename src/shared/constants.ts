@@ -32,7 +32,7 @@ export const ELAPSE_TOLERANCE_MS = 300;
 
 export const MAX_CUSTOM_SITES = 40;
 export const MAX_NAME_LENGTH = 24;
-export const STATS_RETENTION_DAYS = 120;
+export const STATS_RETENTION_DAYS = 400;
 
 export const PAUSE_DURATIONS_MS = {
   '15m': 15 * 60_000,
@@ -41,3 +41,19 @@ export const PAUSE_DURATIONS_MS = {
 
 export const ALARM_PAUSE_END = 'tablin:pause-end';
 export const CUSTOM_SCRIPT_ID = 'tablin-custom-sites';
+
+// ---- V2: focus sessions, streaks, achievements --------------------------------
+
+export const FOCUS_MINUTES_MIN = 1;
+export const FOCUS_MINUTES_MAX = 240;
+export const BREAK_MINUTES_MIN = 1;
+export const BREAK_MINUTES_MAX = 60;
+export const FOCUS_PRESETS_MINUTES = [15, 25, 45, 60, 90] as const;
+/** A completed focus session must be at least this long to count toward the streak. */
+export const STREAK_QUALIFYING_MINUTES = 5;
+/** Ended-early sessions shorter than this aren't recorded at all. */
+export const MIN_RECORDED_FOCUS_MS = 60_000;
+export const FOCUS_HISTORY_LIMIT = 500;
+export const ALARM_FOCUS_END = 'tablin:focus-end';
+export const ALARM_FOCUS_TICK = 'tablin:focus-tick';
+export const STORAGE_SCHEMA_VERSION = 2;

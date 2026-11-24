@@ -21,11 +21,18 @@ export function statusLine(
       tone: 'paused',
     };
   }
+  if (status.relaxing) return { text: 'On a break · relaxing too', tone: 'paused' };
   const tab = status.activeTab;
   if (tab?.phase === 'appeared') return { text: `On its way on ${tab.siteName}!`, tone: 'live' };
   if (tab?.phase === 'counting' && tab.dueAt) {
-    return { text: `Watching ${tab.siteName} · ${formatDuration(tab.dueAt - now)}`, tone: 'live' };
+    return {
+      text: `Watching ${tab.siteName} · ${formatDuration(tab.dueAt - now)} of ${tab.delaySeconds}s`,
+      tone: 'live',
+    };
   }
+  if (tab)
+    return { text: `Watching ${tab.siteName} · ${tab.delaySeconds}s countdown`, tone: 'live' };
+  if (status.focus?.kind === 'focus') return { text: 'Focus session · on watch', tone: 'live' };
   return { text: 'On watch', tone: 'live' };
 }
 
@@ -37,7 +44,10 @@ export function StatusHeader(props: {
   const { status, now } = props;
   const [celebrate, setCelebrate] = useState(false);
   const line = statusLine(status, now);
-  const resting = !status.enabled || status.pause !== null;
+  const resting =
+    !status.enabled ||
+    status.pause !== null ||
+    (status.focus?.kind === 'focus' && status.focus.status === 'running');
   const state: CharacterState = celebrate
     ? 'celebrating'
     : resting
@@ -55,6 +65,7 @@ export function StatusHeader(props: {
           state={state}
           intensity={status.character.intensity}
           name={status.character.name}
+          cosmetics={status.cosmetics}
           onClick={() => {
             setCelebrate(true);
             setTimeout(() => setCelebrate(false), 1300);

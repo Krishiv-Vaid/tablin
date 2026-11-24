@@ -1,8 +1,10 @@
 /**
  * Applies Poses to the SVG rig. Knows nothing about physics, browsers or Chrome.
  */
-import type { CharacterColor } from '../shared/types';
+import type { CharacterColor, Equipped } from '../shared/types';
 import type { Pose } from './CharacterAnimations';
+import type { CharacterState } from './CharacterStateMachine';
+import { buildCosmetic, GOLDEN } from './characters/cosmetics-art';
 import { applyPalette, DESIGNS, MOUTHS, type Rig } from './characters/tablin';
 import { paletteFor } from './characters/palette';
 
@@ -15,7 +17,11 @@ export interface RenderExtras {
   /** e.g. "2.4×" — shown while charging. */
   tensionLabel: string | null;
   facing: 1 | -1;
+  /** Current behavioural state (celebration cosmetics only show while celebrating). */
+  state?: CharacterState;
 }
+
+const NO_COSMETICS: Equipped = { hat: null, accessory: null, effect: null, celebration: null };
 
 export class CharacterRenderer {
   readonly element: HTMLDivElement;
@@ -23,6 +29,8 @@ export class CharacterRenderer {
   private readonly label: HTMLDivElement;
   private sizePx: number;
   private lastExpression = '';
+  private color: CharacterColor = 'orange';
+  private cosmetics: Equipped = { ...NO_COSMETICS };
 
   constructor(doc: Document, options: { design?: string; color: CharacterColor; sizePx: number }) {
     const design = DESIGNS[options.design ?? 'tablin'] ?? DESIGNS.tablin!;
@@ -44,11 +52,49 @@ export class CharacterRenderer {
   }
 
   setColor(color: CharacterColor): void {
+    this.color = color;
     const palette = paletteFor(color);
     applyPalette(this.rig, palette);
     this.element.style.setProperty('--tb-accent', palette.accent);
     this.element.style.setProperty('--tb-outline', palette.outline);
     this.element.dataset.color = color;
+    if (this.cosmetics.effect === 'fx:golden') this.applyGolden();
+  }
+
+  get equipped(): Equipped {
+    return { ...this.cosmetics };
+  }
+
+  /**
+   * Equips cosmetic layers. They are attached inside the rig's body/whole groups,
+   * so they move with every existing animation (walk, run, drag, jump, sleep…).
+   */
+  setCosmetics(equipped: Partial<Equipped>): void {
+    this.cosmetics = { ...NO_COSMETICS, ...equipped };
+    const { rig } = this;
+    const fill = (slot: SVGGElement, id: string | null) => {
+      slot.replaceChildren();
+      const art = id ? buildCosmetic(this.element.ownerDocument, id) : null;
+      if (art) slot.appendChild(art);
+    };
+    fill(rig.hatSlot, this.cosmetics.hat);
+    fill(rig.accessorySlot, this.cosmetics.accessory);
+    fill(rig.effectSlot, this.cosmetics.effect);
+    fill(rig.celebrationSlot, this.cosmetics.celebration);
+    // A hat sits over the tuft.
+    rig.tuft.style.display = this.cosmetics.hat ? 'none' : '';
+    rig.celebrationSlot.style.display = 'none';
+    this.element.dataset.cosmetics = Object.values(this.cosmetics).filter(Boolean).join(' ');
+    applyPalette(rig, paletteFor(this.color));
+    if (this.cosmetics.effect === 'fx:golden') this.applyGolden();
+  }
+
+  /** Golden accent: gilds the tuft, feet and arms (keeps the body color). */
+  private applyGolden(): void {
+    for (const n of this.rig.paint.shade) {
+      n.setAttribute('fill', GOLDEN.fill);
+      n.setAttribute('stroke', GOLDEN.outline);
+    }
   }
 
   setSize(px: number): void {
@@ -123,6 +169,8 @@ export class CharacterRenderer {
     }
 
     rig.sweat.setAttribute('opacity', String(r(pose.sweat)));
+    rig.celebrationSlot.style.display =
+      this.cosmetics.celebration && extras.state === 'celebrating' ? '' : 'none';
     rig.zzz.style.display = pose.zzz ? '' : 'none';
     rig.motion.setAttribute('opacity', String(r(pose.motion)));
     rig.motion.setAttribute('transform', extras.facing === 1 ? '' : 'translate(100 0) scale(-1 1)');

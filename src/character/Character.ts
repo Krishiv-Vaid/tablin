@@ -4,7 +4,7 @@
  * same engine can drive the content-script overlay, the popup preview, or a
  * future native/desktop companion's web view.
  */
-import type { AnimationIntensity, CharacterColor } from '../shared/types';
+import type { AnimationIntensity, CharacterColor, Equipped } from '../shared/types';
 import { INTENSITY_FACTOR } from './CharacterAnimations';
 import {
   CharacterController,
@@ -30,6 +30,10 @@ export interface CharacterOptions {
   /** 'stage' = positioned in a full-viewport layer; 'preview' = sits in its container. */
   mode: 'stage' | 'preview';
   interactive: boolean;
+  /** Equipped cosmetics (hat, accessory, effect, celebration). */
+  cosmetics?: Partial<Equipped>;
+  /** false = render a single still frame (for collection thumbnails). */
+  animate?: boolean;
 }
 
 export interface CharacterEvents extends ControllerEvents {
@@ -55,6 +59,7 @@ export class Character {
     this.renderer = new CharacterRenderer(doc, { color: options.color, sizePx: options.sizePx });
     this.renderer.element.classList.add(options.mode === 'stage' ? 'tb-stage' : 'tb-preview');
     this.renderer.setLabel(`${options.name}, your focus companion`);
+    if (options.cosmetics) this.renderer.setCosmetics(options.cosmetics);
     this.sound = new CharacterSound(options.sound);
 
     const layout: Layout =
@@ -141,11 +146,16 @@ export class Character {
       charge: frame.charge,
       tensionLabel: frame.tensionLabel,
       facing: frame.facing,
+      state: frame.state,
     });
     if (this.options.mode === 'stage') this.renderer.setPosition(frame.pos.x, frame.pos.y);
     this.renderer.element.dataset.state = frame.state;
     this.renderer.element.dataset.mode = frame.mode;
     this.events.onFrame?.(frame);
+    if (this.options.animate === false) {
+      this.stop();
+      return;
+    }
     if (frame.mode === 'hidden' && this.options.mode === 'stage') {
       this.stop();
       return;
@@ -212,6 +222,20 @@ export class Character {
 
   setReducedMotion(reducedMotion: boolean): void {
     this.controller.setConfig({ reducedMotion });
+  }
+
+  setCosmetics(cosmetics: Partial<Equipped>): void {
+    this.options = { ...this.options, cosmetics };
+    this.renderer.setCosmetics(cosmetics);
+  }
+
+  /** Re-render one frame (used by still previews after a change). */
+  redraw(): void {
+    if (!this.running) {
+      this.running = true;
+      this.lastTs = 0;
+      this.raf = this.win.requestAnimationFrame(this.loop);
+    }
   }
 
   setSound(enabled: boolean): void {

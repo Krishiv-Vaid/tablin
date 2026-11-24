@@ -130,3 +130,130 @@ body {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---- V2 popup ---- */
+.popup-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.popup-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.tab-badge {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+}
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.focus-pop {
+  padding: 16px 14px;
+}
+.focus-banner {
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.banner-time {
+  font-family: var(--font);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.tiles.four {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.tiles.four .tile {
+  padding: 8px 9px;
+}
+.tiles.four .tile-value {
+  font-size: 16px;
+  white-space: nowrap;
+}
+.site-strip {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font: inherit;
+  color: var(--fg-2);
+}
+.site-strip:hover {
+  border-color: var(--line-strong);
+}
+.site-strip-label {
+  font-family: var(--font);
+  font-weight: 650;
+  font-size: 12px;
+}
+.site-strip-icons {
+  display: flex;
+  gap: 8px;
+}
+.site-strip-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.site-strip-delay {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.emergency {
+  align-self: flex-start;
+}
+.popup-nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.nav-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  color: var(--fg-2);
+  font-family: var(--font);
+  font-weight: 650;
+  font-size: 11px;
+  cursor: pointer;
+}
+.nav-btn:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+.popup .unlock-toast {
+  padding: 8px 10px;
+}
+.popup .unlock-actions {
+  flex-direction: column;
+}

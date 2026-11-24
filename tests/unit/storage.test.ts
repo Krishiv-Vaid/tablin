@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSettings } from '../../src/shared/settings';
 import { LOCAL_KEYS, TablinStore } from '../../src/shared/storage';
+import { emptyStats } from '../../src/shared/stats';
 import { MemoryArea } from './helpers';
 
 describe('storage persistence', () => {
@@ -56,7 +57,12 @@ describe('storage persistence', () => {
   it('resetStats clears counters and escalation', async () => {
     const local = new MemoryArea();
     const store = new TablinStore(local, new MemoryArea());
-    await store.setStats({ days: {}, totalIntercepted: 5, totalClosed: 2, totalFocusSessions: 3 });
+    await store.setStats({
+      ...emptyStats(),
+      totalIntercepted: 5,
+      totalClosed: 2,
+      totalFocusSessions: 3,
+    });
     await store.setEscalation({ count: 4, periodKey: 'day:x' });
     await store.resetStats();
     expect((await store.getStats()).totalIntercepted).toBe(0);

@@ -75,6 +75,15 @@ export const PALETTES: Record<CharacterColor, CharacterPalette> = {
     cheek: '#FFC2BA',
     accent: '#DD4A3E',
   },
+  // Unlockable (Getting Started achievement).
+  pastel: {
+    body: '#FFC6DC',
+    shade: '#F5A3C3',
+    outline: '#9B4470',
+    belly: '#FFE8F1',
+    cheek: '#FF7FA8',
+    accent: '#D9709C',
+  },
 };
 
 export function paletteFor(color: CharacterColor): CharacterPalette {
@@ -89,4 +98,5 @@ export const COLOR_LABELS: Record<CharacterColor, string> = {
   green: 'Mint',
   yellow: 'Sunny',
   red: 'Cherry',
+  pastel: 'Pastel Pink',
 };

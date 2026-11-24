@@ -83,7 +83,8 @@ describe('settings validation', () => {
     });
     const yt = s.sites.find((x) => x.id === 'youtube')!;
     expect(yt.enabled).toBe(false);
-    expect(yt.delaySeconds).toBe(30);
+    // v1's numeric delaySeconds migrates to a v2 DelayConfig.
+    expect(yt.delay).toEqual({ mode: 'preset', seconds: 30 });
     expect(yt.domains).toEqual(['youtube.com']);
     expect(yt.name).toBe('YouTube');
     expect(s.sites).toHaveLength(6);
@@ -119,6 +120,6 @@ describe('settings validation', () => {
     const s = defaultSettings();
     const yt = s.sites.find((x) => x.id === 'youtube')!;
     expect(baseDelayMs(s, yt)).toBe(12_000);
-    expect(baseDelayMs(s, { ...yt, delaySeconds: 30 })).toBe(30_000);
+    expect(baseDelayMs(s, { ...yt, delay: { mode: 'custom', seconds: 27 } })).toBe(27_000);
   });
 });

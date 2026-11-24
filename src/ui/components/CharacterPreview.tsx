@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Character } from '../../character/Character';
 import type { CharacterState } from '../../character/CharacterStateMachine';
-import type { AnimationIntensity, CharacterColor } from '../../shared/types';
+import type { AnimationIntensity, CharacterColor, Equipped } from '../../shared/types';
 import '../../character/character.css';
 
 /** Mounts the real character engine in preview mode inside a React tree. */
@@ -11,6 +11,7 @@ export function CharacterPreview(props: {
   state: CharacterState;
   intensity?: AnimationIntensity;
   name?: string;
+  cosmetics?: Partial<Equipped>;
   onClick?(): void;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -30,6 +31,7 @@ export function CharacterPreview(props: {
       name: props.name ?? 'Tablin',
       mode: 'preview',
       interactive: false,
+      cosmetics: props.cosmetics,
     });
     c.mount(host.current);
     c.preview(props.state);
@@ -43,6 +45,12 @@ export function CharacterPreview(props: {
   }, [props.size]);
 
   useEffect(() => character.current?.setColor(props.color), [props.color]);
+  const cosmeticsKey = JSON.stringify(props.cosmetics ?? {});
+  useEffect(
+    () => character.current?.setCosmetics(props.cosmetics ?? {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cosmeticsKey],
+  );
   useEffect(() => character.current?.preview(props.state), [props.state]);
   useEffect(() => character.current?.setIntensity(props.intensity ?? 'normal'), [props.intensity]);
 
@@ -56,7 +64,19 @@ export function CharacterPreview(props: {
         cursor: props.onClick ? 'pointer' : 'default',
       }}
       onClick={props.onClick}
-      aria-hidden="true"
+      {...(props.onClick
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `Pet ${props.name ?? 'Tablin'}`,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                props.onClick?.();
+              }
+            },
+          }
+        : { 'aria-hidden': true })}
     />
   );
 }

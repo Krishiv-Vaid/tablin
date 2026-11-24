@@ -1,4 +1,18 @@
-import type { CloseResult, LastClosedTab, PauseMode, StatusSnapshot, TabSync } from './types';
+import { isEquipSlot, type EquipSlot } from './cosmetics';
+import {
+  FOCUS_KINDS,
+  type AchievementRecord,
+  type CloseResult,
+  type FocusKind,
+  type FocusSnapshot,
+  type Inventory,
+  type LastClosedTab,
+  type PauseMode,
+  type Stats,
+  type StatusSnapshot,
+  type TabSync,
+  type UnlockEvent,
+} from './types';
 
 /** Messages sent by the content script (sender.tab identifies the tab). */
 export type ContentMessage =
@@ -18,7 +32,17 @@ export type UiMessage =
   | { type: 'EMERGENCY_STOP' }
   | { type: 'CANCEL_ACTIVE' }
   | { type: 'REOPEN_LAST' }
-  | { type: 'RESET_STATS' };
+  | { type: 'RESET_STATS' }
+  // V2
+  | { type: 'FOCUS_GET' }
+  | { type: 'FOCUS_START'; kind: FocusKind; minutes?: number }
+  | { type: 'FOCUS_PAUSE' }
+  | { type: 'FOCUS_RESUME' }
+  | { type: 'FOCUS_END' }
+  | { type: 'FOCUS_ACK' }
+  | { type: 'PROGRESS_GET' }
+  | { type: 'EQUIP'; slot: EquipSlot; id: string | null }
+  | { type: 'ACK_UNLOCKS' };
 
 export type TablinMessage = ContentMessage | UiMessage;
 export type MessageType = TablinMessage['type'];
@@ -41,6 +65,23 @@ export interface ResponseMap {
   CANCEL_ACTIVE: StatusSnapshot;
   REOPEN_LAST: { reopened: boolean; tab: LastClosedTab | null };
   RESET_STATS: StatusSnapshot;
+  FOCUS_GET: FocusSnapshot;
+  FOCUS_START: FocusSnapshot | { ok: false; error: string };
+  FOCUS_PAUSE: FocusSnapshot;
+  FOCUS_RESUME: FocusSnapshot;
+  FOCUS_END: FocusSnapshot;
+  FOCUS_ACK: FocusSnapshot;
+  PROGRESS_GET: ProgressSnapshot;
+  EQUIP: { ok: true; inventory: Inventory } | { ok: false; error: string };
+  ACK_UNLOCKS: ProgressSnapshot;
+}
+
+export interface ProgressSnapshot {
+  now: number;
+  achievements: AchievementRecord;
+  inventory: Inventory;
+  unseen: UnlockEvent[];
+  stats: Stats;
 }
 
 const MESSAGE_TYPES: ReadonlySet<string> = new Set<MessageType>([
@@ -58,6 +99,15 @@ const MESSAGE_TYPES: ReadonlySet<string> = new Set<MessageType>([
   'CANCEL_ACTIVE',
   'REOPEN_LAST',
   'RESET_STATS',
+  'FOCUS_GET',
+  'FOCUS_START',
+  'FOCUS_PAUSE',
+  'FOCUS_RESUME',
+  'FOCUS_END',
+  'FOCUS_ACK',
+  'PROGRESS_GET',
+  'EQUIP',
+  'ACK_UNLOCKS',
 ]);
 
 const CONTENT_TYPES: ReadonlySet<string> = new Set<MessageType>([
@@ -93,6 +143,15 @@ export function isTablinMessage(value: unknown): value is TablinMessage {
         msg.mode === 'session' ||
         msg.mode === 'indefinite'
       );
+    case 'FOCUS_START':
+      return (
+        typeof msg.kind === 'string' &&
+        (FOCUS_KINDS as readonly string[]).includes(msg.kind) &&
+        (msg.minutes === undefined ||
+          (typeof msg.minutes === 'number' && Number.isInteger(msg.minutes)))
+      );
+    case 'EQUIP':
+      return isEquipSlot(msg.slot) && (msg.id === null || typeof msg.id === 'string');
     default:
       return true;
   }

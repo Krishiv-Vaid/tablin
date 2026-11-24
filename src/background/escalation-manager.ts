@@ -3,9 +3,12 @@ import {
   MIN_ESCALATED_DELAY_MS,
   SPEED_MULTIPLIER_MAX,
 } from '../shared/constants';
+import { EMPTY_EQUIPPED } from '../shared/cosmetics';
 import { dayKey } from '../shared/stats';
 import type {
   ApproachPlan,
+  CharacterColor,
+  Equipped,
   BehaviorSettings,
   EscalationCurve,
   EscalationState,
@@ -94,19 +97,36 @@ export function messageForLevel(level: number, name: string, siteName: string): 
   return null;
 }
 
-export function buildPlan(level: number, settings: Settings, siteName: string): ApproachPlan {
+export interface PlanExtras {
+  color?: CharacterColor;
+  cosmetics?: Equipped;
+  focusActive?: boolean;
+}
+
+export function buildPlan(
+  level: number,
+  settings: Settings,
+  siteName: string,
+  extras: PlanExtras = {},
+): ApproachPlan {
   const { behavior, character } = settings;
   const speedMultiplier = speedMultiplierForLevel(level, behavior);
   const escalated = behavior.escalationEnabled ? level : 1;
+  const focusActive = extras.focusActive ?? false;
+  const levelMessage = behavior.escalationEnabled
+    ? messageForLevel(level, character.name, siteName)
+    : null;
   return {
     level,
     speedMultiplier,
     gait: gaitFor(escalated, speedMultiplier, behavior.speed),
     mood: behavior.escalationEnabled ? moodForLevel(level) : 'casual',
-    message: behavior.escalationEnabled ? messageForLevel(level, character.name, siteName) : null,
+    message: levelMessage ?? (focusActive ? `You're mid-focus! ${character.name} is on it.` : null),
     autoClose: settings.autoClose,
     siteName,
-    character: { ...character },
+    character: { ...character, color: extras.color ?? character.color },
+    cosmetics: { ...(extras.cosmetics ?? EMPTY_EQUIPPED) },
+    focusActive,
     behavior: {
       slingshotEnabled: behavior.slingshotEnabled,
       soundEnabled: behavior.soundEnabled,

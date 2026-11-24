@@ -21,6 +21,9 @@ describe('manifest', () => {
 
   it('requests only minimal permissions (no tabs, history, or <all_urls>)', () => {
     expect([...manifest.permissions].sort()).toEqual(['alarms', 'scripting', 'storage']);
+    // V2: notifications are opt-in via an optional permission, so upgrading never
+    // adds an install-time permission (which would make Chrome disable the extension).
+    expect(manifest.optional_permissions).toEqual(['notifications']);
     expect(JSON.stringify(manifest.host_permissions)).not.toContain('<all_urls>');
     expect(manifest.optional_host_permissions).toEqual(['*://*/*']);
   });

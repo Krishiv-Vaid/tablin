@@ -1,4 +1,5 @@
 import type { StatusSnapshot } from '../../shared/types';
+import { formatMinutes } from '../../ui/hooks';
 
 function Tile(props: { value: string; label: string; hint?: string }) {
   return (
@@ -13,9 +14,22 @@ function Tile(props: { value: string; label: string; hint?: string }) {
 export function StatsRow({ status }: { status: StatusSnapshot }) {
   const esc = status.escalation;
   return (
-    <section className="tiles" aria-label="Today">
-      <Tile value={String(status.today.intercepted)} label="Caught today" />
-      <Tile value={String(status.session.intercepted)} label="This session" />
+    <section className="tiles four" aria-label="Today">
+      <Tile
+        value={String(status.today.intercepted)}
+        label="Caught today"
+        hint={`${status.session.intercepted} this session`}
+      />
+      <Tile
+        value={formatMinutes(status.today.focusMinutes)}
+        label="Focus today"
+        hint={`${status.today.focusSessions} done`}
+      />
+      <Tile
+        value={`${status.streak.current}d`}
+        label="Streak"
+        hint={`best ${status.streak.longest}d`}
+      />
       <Tile
         value={esc.enabled ? `Lv ${esc.nextLevel}` : 'Off'}
         label="Next speed"

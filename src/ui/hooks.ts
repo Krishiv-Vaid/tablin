@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { sendToWorker } from '../shared/messages';
-import { LOCAL_KEYS, loadSettings, loadStats, saveSettings } from '../shared/storage';
-import type { Settings, Stats, StatusSnapshot } from '../shared/types';
+import { sendToWorker, type ProgressSnapshot } from '../shared/messages';
+import { LOCAL_KEYS, loadSettings, saveSettings } from '../shared/storage';
+import type { FocusSnapshot, Settings, StatusSnapshot } from '../shared/types';
 import { paletteFor } from '../character/characters/palette';
 
 /** Live settings from chrome.storage.local, with validated saves. */
@@ -29,19 +29,6 @@ export function useSettings() {
   }, []);
 
   return { settings, update };
-}
-
-export function useStats() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  useEffect(() => {
-    void loadStats().then(setStats);
-    const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'local' && changes[LOCAL_KEYS.stats]) void loadStats().then(setStats);
-    };
-    chrome.storage.onChanged.addListener(onChange);
-    return () => chrome.storage.onChanged.removeListener(onChange);
-  }, []);
-  return stats;
 }
 
 /** Polls the worker for status while the view is open (for live countdowns). */
@@ -97,4 +84,78 @@ export function timeAgo(ms: number): string {
   if (s < 60) return 'just now';
   const m = Math.round(s / 60);
   return m === 1 ? '1 min ago' : `${m} min ago`;
+}
+
+// ---- V2 hooks -------------------------------------------------------------------
+
+/**
+ * Focus timer state. The worker owns the timer; this only polls (1 s) while the
+ * view is open to render the countdown, and derives remaining time from timestamps.
+ */
+export function useFocus(intervalMs = 1000) {
+  const [snap, setSnap] = useState<FocusSnapshot | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      setSnap(await sendToWorker({ type: 'FOCUS_GET' }));
+    } catch {
+      // worker restarting; next tick retries
+    }
+  }, []);
+  useEffect(() => {
+    void refresh();
+    const id = setInterval(() => void refresh(), intervalMs);
+    return () => clearInterval(id);
+  }, [refresh, intervalMs]);
+  return { snap, setSnap, refresh };
+}
+
+/** Achievements, inventory and stats; refreshes whenever they change in storage. */
+export function useProgress() {
+  const [progress, setProgress] = useState<ProgressSnapshot | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      setProgress(await sendToWorker({ type: 'PROGRESS_GET' }));
+    } catch {
+      // ignore
+    }
+  }, []);
+  useEffect(() => {
+    void refresh();
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (
+        area === 'local' &&
+        (changes[LOCAL_KEYS.achievements] ||
+          changes[LOCAL_KEYS.inventory] ||
+          changes[LOCAL_KEYS.stats] ||
+          changes[LOCAL_KEYS.unseenUnlocks])
+      ) {
+        void refresh();
+      }
+    };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => chrome.storage.onChanged.removeListener(onChange);
+  }, [refresh]);
+  return { progress, setProgress, refresh };
+}
+
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(h ? 2 : 1, '0');
+  return `${h ? `${h}:` : ''}${mm}:${String(s).padStart(2, '0')}`;
+}
+
+export function formatMinutes(minutes: number): string {
+  const m = Math.round(minutes);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+}
+
+export function openOptions(section?: string) {
+  void chrome.tabs.create({
+    url: chrome.runtime.getURL(`options/index.html${section ? `#${section}` : ''}`),
+  });
 }
