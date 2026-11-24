@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Endless feed · test fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        background: #f4f4f5;
+        color: #18181b;
+      }
+      header {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        padding: 0 24px;
+        background: #fff;
+        border-bottom: 1px solid #e4e4e7;
+        font-weight: 700;
+      }
+      header span {
+        margin-left: 10px;
+        font-weight: 400;
+        color: #71717a;
+        font-size: 13px;
+      }
+      main {
+        max-width: 640px;
+        margin: 24px auto;
+        display: grid;
+        gap: 16px;
+        padding: 0 16px;
+      }
+      .post {
+        background: #fff;
+        border: 1px solid #e4e4e7;
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .media {
+        height: 220px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #e4e4e7, #d4d4d8);
+        margin-top: 10px;
+      }
+      .meta {
+        color: #71717a;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>Endless feed <span>local test page served as {{URL}}</span></header>
+    <main>
+      <div class="post">
+        <div class="meta">@someone · 2m</div>
+        Just one more video, I promise.
+        <div class="media"></div>
+      </div>
+      <div class="post">
+        <div class="meta">@another · 5m</div>
+        You won't believe what happens next.
+        <div class="media"></div>
+      </div>
+      <div class="post">
+        <div class="meta">@third · 9m</div>
+        Top 10 ways to avoid your to-do list.
+        <div class="media"></div>
+      </div>
+    </main>
+  </body>
+</html>

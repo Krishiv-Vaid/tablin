@@ -1,0 +1,7 @@
+dist
+release
+node_modules
+.cache
+coverage
+package-lock.json
+public/icons

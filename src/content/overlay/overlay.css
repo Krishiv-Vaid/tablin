@@ -1,0 +1,274 @@
+/* Page overlay UI (inside a closed shadow root, isolated from the host page's CSS). */
+:host {
+  all: initial;
+}
+.tb-layer {
+  --tb-bg: #fffdf9;
+  --tb-fg: #2b2622;
+  --tb-muted: #6e655d;
+  --tb-line: rgba(43, 38, 34, 0.1);
+  --tb-btn: #2b2622;
+  --tb-btn-fg: #ffffff;
+  --tb-soft: rgba(43, 38, 34, 0.06);
+  --tb-shadow: 0 10px 30px rgba(43, 38, 34, 0.16), 0 2px 6px rgba(43, 38, 34, 0.08);
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  font:
+    500 13px/1.4 ui-rounded,
+    'SF Pro Rounded',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--tb-fg);
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+  .tb-layer {
+    --tb-bg: #27231f;
+    --tb-fg: #f5efe9;
+    --tb-muted: #b5aba1;
+    --tb-line: rgba(255, 255, 255, 0.1);
+    --tb-btn: #f5efe9;
+    --tb-btn-fg: #27231f;
+    --tb-soft: rgba(255, 255, 255, 0.08);
+    --tb-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* The stand-in for the tab's close button. */
+.tb-exit {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--tb-bg);
+  border: 1px solid var(--tb-line);
+  box-shadow: var(--tb-shadow);
+  color: var(--tb-fg);
+  opacity: 0;
+  transform: translateY(-6px) scale(0.9);
+  transition:
+    opacity 220ms ease,
+    transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1),
+    background-color 160ms ease;
+}
+.tb-exit svg {
+  width: 14px;
+  height: 14px;
+}
+.tb-exit.tb-on {
+  opacity: 1;
+  transform: none;
+}
+.tb-exit.tb-on.tb-pulse {
+  animation: tb-pulse 1.6s ease-in-out infinite;
+}
+.tb-exit.tb-pressed {
+  transform: translateY(2px) scale(0.92);
+  background: var(--tb-btn);
+  color: var(--tb-btn-fg);
+  animation: none;
+}
+.tb-exit-hint {
+  position: absolute;
+  top: -2px;
+  right: calc(100% + 8px);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--tb-muted);
+  background: var(--tb-bg);
+  border: 1px solid var(--tb-line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.tb-exit.tb-on .tb-exit-hint.tb-show {
+  opacity: 1;
+}
+@keyframes tb-pulse {
+  0%,
+  100% {
+    box-shadow:
+      var(--tb-shadow),
+      0 0 0 0 rgba(232, 119, 42, 0);
+  }
+  50% {
+    box-shadow:
+      var(--tb-shadow),
+      0 0 0 6px color-mix(in srgb, var(--tb-accent, #e8772a) 22%, transparent);
+  }
+}
+
+/* Small status chip during the approach. */
+.tb-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: var(--tb-bg);
+  border: 1px solid var(--tb-line);
+  box-shadow: var(--tb-shadow);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+.tb-chip.tb-on {
+  opacity: 1;
+  transform: none;
+}
+.tb-chip:not(.tb-on) {
+  pointer-events: none;
+  transition-duration: 120ms;
+}
+.tb-chip-text {
+  font-size: 12.5px;
+  color: var(--tb-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tb-accent, #e8772a);
+  flex: none;
+}
+
+/* Speech bubble at the exit. */
+.tb-bubble {
+  position: absolute;
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background: var(--tb-bg);
+  border: 1px solid var(--tb-line);
+  box-shadow: var(--tb-shadow);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  transform-origin: top right;
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.tb-bubble.tb-on {
+  opacity: 1;
+  transform: none;
+  /* Let the status chip fade out first so the two never overlap visibly. */
+  transition-delay: 150ms;
+}
+.tb-bubble::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  right: var(--tb-tail-right, 40px);
+  width: 12px;
+  height: 12px;
+  background: var(--tb-bg);
+  border-left: 1px solid var(--tb-line);
+  border-top: 1px solid var(--tb-line);
+  transform: rotate(45deg);
+}
+.tb-title {
+  font-size: 14.5px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  margin: 0 0 3px;
+}
+.tb-body {
+  color: var(--tb-muted);
+  margin: 0 0 12px;
+}
+.tb-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.tb-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--tb-soft);
+  overflow: hidden;
+  margin: 0 0 12px;
+}
+.tb-progress > div {
+  height: 100%;
+  width: 100%;
+  background: var(--tb-accent, #e8772a);
+  transform-origin: left;
+}
+.tb-kbd {
+  font-size: 11px;
+  color: var(--tb-muted);
+  margin-right: auto;
+  align-self: center;
+}
+
+.tb-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 9px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: var(--tb-btn);
+  color: var(--tb-btn-fg);
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+.tb-btn:hover {
+  opacity: 0.88;
+}
+.tb-btn:active {
+  transform: scale(0.96);
+}
+.tb-btn:focus-visible {
+  outline: 2px solid var(--tb-accent, #e8772a);
+  outline-offset: 2px;
+}
+.tb-btn.tb-ghost {
+  background: var(--tb-soft);
+  color: var(--tb-fg);
+}
+.tb-btn.tb-small {
+  padding: 7px 11px;
+  font-size: 12px;
+}
+.tb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-exit,
+  .tb-chip,
+  .tb-bubble {
+    transition: opacity 120ms linear;
+    transform: none !important;
+    animation: none !important;
+  }
+}

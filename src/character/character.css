@@ -1,0 +1,94 @@
+/* Character engine styles. Scoped by tb- prefixes; injected into a shadow root on web pages. */
+.tb-character {
+  position: relative;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  will-change: transform, opacity;
+  contain: layout style;
+}
+.tb-character.tb-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.tb-character.tb-preview {
+  cursor: default;
+}
+.tb-character.tb-grabbing {
+  cursor: grabbing;
+}
+.tb-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.tb-shadow {
+  fill: #000;
+}
+.tb-tension,
+.tb-tension-track {
+  transition: opacity 160ms ease;
+  opacity: 0;
+}
+.tb-tension {
+  stroke: var(--tb-accent, #e8772a) !important;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.15));
+}
+.tb-tension-label {
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tb-outline, #8a4316);
+  color: #fff;
+  font:
+    700 11px/1.4 ui-rounded,
+    'SF Pro Rounded',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+.tb-z {
+  font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  font-weight: 800;
+  opacity: 0;
+  animation: tb-z-float 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.tb-z1 {
+  animation-delay: 0.8s;
+}
+.tb-z2 {
+  animation-delay: 1.6s;
+}
+@keyframes tb-z-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px) scale(0.7);
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -10px) scale(1.1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-z {
+    animation: none;
+    opacity: 0.7;
+  }
+}

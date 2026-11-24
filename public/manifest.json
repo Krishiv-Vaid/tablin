@@ -1,0 +1,84 @@
+{
+  "manifest_version": 3,
+  "name": "Tablin",
+  "short_name": "Tablin",
+  "version": "0.1.0",
+  "description": "A tiny companion that walks over and nudges you off distracting sites. Drag it back, it slingshots forward.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Tablin",
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "alarms", "scripting"],
+  "host_permissions": [
+    "*://instagram.com/*",
+    "*://*.instagram.com/*",
+    "*://tiktok.com/*",
+    "*://*.tiktok.com/*",
+    "*://youtube.com/*",
+    "*://*.youtube.com/*",
+    "*://facebook.com/*",
+    "*://*.facebook.com/*",
+    "*://reddit.com/*",
+    "*://*.reddit.com/*",
+    "*://x.com/*",
+    "*://*.x.com/*"
+  ],
+  "optional_host_permissions": ["*://*/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://instagram.com/*",
+        "*://*.instagram.com/*",
+        "*://tiktok.com/*",
+        "*://*.tiktok.com/*",
+        "*://youtube.com/*",
+        "*://*.youtube.com/*",
+        "*://facebook.com/*",
+        "*://*.facebook.com/*",
+        "*://reddit.com/*",
+        "*://*.reddit.com/*",
+        "*://x.com/*",
+        "*://*.x.com/*"
+      ],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "emergency-stop": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Emergency stop: send Tablin away and pause until resumed"
+    },
+    "quick-pause": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Pause Tablin for your default pause duration"
+    },
+    "reopen-last": {
+      "suggested_key": { "default": "Alt+Shift+Z" },
+      "description": "Reopen the last tab Tablin closed"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

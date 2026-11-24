@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+coverage/
+*.tsbuildinfo
+
+# Local caches (e2e browser download, test profiles)
+.cache/
+tests/e2e/.profile*/
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.crx
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.log
