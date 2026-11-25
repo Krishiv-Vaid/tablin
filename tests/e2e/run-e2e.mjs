@@ -328,7 +328,29 @@ async function main() {
     await yt.close();
   });
 
-  await setSettings(ext, { autoClose: true });
+  await setSettings(ext, { autoClose: true, closeTimerSeconds: 0 });
+
+  await check('close timer 0 s (default): walks over and clicks the X with no wait', async () => {
+    const page = await openSite(browser, 'https://www.reddit.com/r/instant');
+    await waitFor(async () => (await overlayInfo(page)).mode === 'moving', {
+      timeout: 30000,
+      message: 'character moving',
+    });
+    let arrivedAt = 0;
+    let sawCountdown = false;
+    while (await tabExists(browser, page)) {
+      const i = await overlayInfo(page).catch(() => ({}));
+      if (!arrivedAt && (i.mode === 'arriving' || i.mode === 'parked')) arrivedAt = Date.now();
+      if (/Closing this tab/.test(i.bubble ?? '')) sawCountdown = true;
+      assert(Date.now() - (arrivedAt || Date.now()) < 3000, 'closes promptly after arriving');
+      await sleep(60);
+    }
+    assert(arrivedAt, 'reached the X before closing');
+    assert(!sawCountdown, 'no countdown at the X');
+  });
+
+  // The remaining auto-close checks exercise the optional cancel window.
+  await setSettings(ext, { closeTimerSeconds: 3 });
 
   await check(
     'slingshot: dragging back charges tension; release launches; closes after the cancel window',

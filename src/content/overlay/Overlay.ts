@@ -7,7 +7,7 @@
  * along the top edge of the *page* to this stand-in; the actual closing is done
  * by the background worker with chrome.tabs.remove after re-verification.
  */
-import { CANCEL_WINDOW_MS } from '../../shared/constants';
+import { CLOSE_CLICK_MS } from '../../shared/constants';
 import type { ApproachPlan, CloseResult } from '../../shared/types';
 import { Character, sizeToPx } from '../../character/Character';
 import { STAGE } from '../../character/CharacterController';
@@ -90,6 +90,7 @@ export class Overlay {
   private plan: ApproachPlan;
   private phase: Phase = 'approach';
   private countdownRaf = 0;
+  private clickTimer: ReturnType<typeof setTimeout> | undefined;
   private sleepTimer: ReturnType<typeof setTimeout> | undefined;
   private charPos: Vec = { x: 0, y: 0 };
   private readonly win: Window;
@@ -257,14 +258,16 @@ export class Overlay {
     this.exitHint.classList.remove('tb-show');
     this.exit.classList.remove('tb-pulse');
     this.exit.classList.add('tb-pressed');
-    if (this.plan.autoClose) this.startCountdown();
-    else this.showNudge();
+    if (!this.plan.autoClose) this.showNudge();
+    else if (this.plan.closeTimerSeconds > 0)
+      this.startCountdown(this.plan.closeTimerSeconds * 1000);
+    else this.clickClose();
   }
 
   /** The user grabbed the character: abandon any countdown; it will try again on arrival. */
   private interrupted(): void {
     if (this.phase === 'leaving') return;
-    cancelAnimationFrame(this.countdownRaf);
+    this.stopTimers();
     clearTimeout(this.sleepTimer);
     this.exit.classList.remove('tb-pressed');
     this.exit.classList.add('tb-pulse');
@@ -272,7 +275,22 @@ export class Overlay {
     this.phase = 'approach';
   }
 
-  private startCountdown(): void {
+  private stopTimers(): void {
+    cancelAnimationFrame(this.countdownRaf);
+    clearTimeout(this.clickTimer);
+    clearTimeout(this.sleepTimer);
+  }
+
+  /** Close timer set to 0: the character presses the X as soon as it gets there. */
+  private clickClose(): void {
+    this.phase = 'countdown';
+    this.announce('Closing this tab.');
+    this.clickTimer = setTimeout(() => {
+      if (this.phase === 'countdown') void this.requestClose('auto');
+    }, CLOSE_CLICK_MS);
+  }
+
+  private startCountdown(windowMs: number): void {
     this.phase = 'countdown';
     const name = this.plan.character.name;
     const title = h(this.doc, 'p', { class: 'tb-title' });
@@ -294,15 +312,15 @@ export class Overlay {
     ]);
     keep.focus({ preventScroll: true });
     this.announce(
-      `Closing this tab in ${Math.ceil(CANCEL_WINDOW_MS / 1000)} seconds. Press Escape to keep it.`,
+      `Closing this tab in ${Math.ceil(windowMs / 1000)} seconds. Press Escape to keep it.`,
     );
 
     const startedAt = performance.now();
     const tick = (now: number) => {
       if (this.phase !== 'countdown') return;
-      const left = Math.max(0, CANCEL_WINDOW_MS - (now - startedAt));
+      const left = Math.max(0, windowMs - (now - startedAt));
       title.textContent = `Closing this tab in ${Math.ceil(left / 1000)}…`;
-      bar.style.transform = `scaleX(${left / CANCEL_WINDOW_MS})`;
+      bar.style.transform = `scaleX(${left / windowMs})`;
       if (left <= 0) {
         void this.requestClose('auto');
         return;
@@ -347,8 +365,7 @@ export class Overlay {
   }
 
   private async requestClose(trigger: 'auto' | 'manual'): Promise<void> {
-    cancelAnimationFrame(this.countdownRaf);
-    clearTimeout(this.sleepTimer);
+    this.stopTimers();
     let result: CloseResult;
     try {
       result = await this.callbacks.onRequestClose(trigger);
@@ -356,6 +373,14 @@ export class Overlay {
       result = { ok: false, reason: 'not-tracked' };
     }
     if (result.ok) return; // The tab is closing.
+    if (result.reason === 'too-soon' && this.phase === 'countdown') {
+      // Arrived faster than the worker's minimum on-screen time (e.g. a quick slingshot
+      // with a 0 s close timer): keep the hand on the X and press again shortly.
+      this.clickTimer = setTimeout(() => {
+        if (this.phase === 'countdown') void this.requestClose(trigger);
+      }, 400);
+      return;
+    }
     if (result.reason === 'auto-close-off') {
       this.showNudge();
       return;
@@ -404,8 +429,7 @@ export class Overlay {
   dismiss(): void {
     if (this.phase === 'leaving') return;
     this.phase = 'leaving';
-    cancelAnimationFrame(this.countdownRaf);
-    clearTimeout(this.sleepTimer);
+    this.stopTimers();
     this.hideBubble();
     this.chip.classList.remove('tb-on');
     this.exit.classList.remove('tb-on', 'tb-pulse', 'tb-pressed');
@@ -440,8 +464,7 @@ export class Overlay {
   };
 
   destroy(): void {
-    cancelAnimationFrame(this.countdownRaf);
-    clearTimeout(this.sleepTimer);
+    this.stopTimers();
     this.win.removeEventListener('resize', this.onResize);
     this.win.removeEventListener('pointermove', this.onPointer);
     this.win.removeEventListener('keydown', this.onKey, true);

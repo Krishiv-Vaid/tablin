@@ -109,6 +109,8 @@ export interface Settings {
   enabled: boolean;
   /** Off by default: new installs start in nudge mode. */
   autoClose: boolean;
+  /** Auto-close only: seconds the character waits at the X before closing (0 = instantly). */
+  closeTimerSeconds: number;
   delaySeconds: number;
   defaultPause: DefaultPause;
   sites: SiteRule[];
@@ -296,6 +298,8 @@ export interface ApproachPlan {
   mood: Mood;
   message: string | null;
   autoClose: boolean;
+  /** Seconds to wait at the X before closing (0 = click it straight away). */
+  closeTimerSeconds: number;
   siteName: string;
   character: CharacterSettings;
   /** Equipped cosmetics, already filtered to what's unlocked. */
@@ -331,6 +335,7 @@ export type CloseResult = { ok: true } | { ok: false; reason: CloseRefusal };
 export interface StatusSnapshot {
   enabled: boolean;
   autoClose: boolean;
+  closeTimerSeconds: number;
   onboardingComplete: boolean;
   defaultPause: DefaultPause;
   pause: PauseState | null;

@@ -43,6 +43,19 @@ describe('settings validation', () => {
     expect(validateSettings({ delaySeconds: Number.NaN }).delaySeconds).toBe(12);
   });
 
+  it('close timer: defaults to 0 s (instant), clamps to 0–10 s, and fills in for older settings', () => {
+    expect(defaultSettings().closeTimerSeconds).toBe(0);
+    expect(validateSettings({ closeTimerSeconds: 3 }).closeTimerSeconds).toBe(3);
+    expect(validateSettings({ closeTimerSeconds: -2 }).closeTimerSeconds).toBe(0);
+    expect(validateSettings({ closeTimerSeconds: 99 }).closeTimerSeconds).toBe(10);
+    expect(validateSettings({ closeTimerSeconds: 2.6 }).closeTimerSeconds).toBe(3);
+    expect(validateSettings({ closeTimerSeconds: '5' }).closeTimerSeconds).toBe(0);
+    // Saved before the setting existed: keeps auto-close, gets the instant default.
+    const old = validateSettings({ autoClose: true, delaySeconds: 20 });
+    expect(old.autoClose).toBe(true);
+    expect(old.closeTimerSeconds).toBe(0);
+  });
+
   it('rejects invalid enum values and wrong types', () => {
     const s = validateSettings({
       enabled: 'yes',

@@ -17,8 +17,15 @@ export const DEFAULT_MAX_SPEED_MULTIPLIER = 2.2;
 export const SPEED_SETTING_MIN = 0.5;
 export const SPEED_SETTING_MAX = 2;
 
-/** After the character reaches the exit, the user gets this long to keep the tab. */
-export const CANCEL_WINDOW_MS = 3_000;
+/**
+ * Close timer: how long the character waits with its hand on the X (auto-close only)
+ * before the tab closes. 0 = it walks over and clicks it straight away.
+ */
+export const CLOSE_TIMER_MIN_SECONDS = 0;
+export const CLOSE_TIMER_MAX_SECONDS = 10;
+export const DEFAULT_CLOSE_TIMER_SECONDS = 0;
+/** How long the "click" on the X reads before the tab closes when the timer is 0. */
+export const CLOSE_CLICK_MS = 320;
 /** Server-side guard: a close is refused if the character appeared less than this long ago. */
 export const MIN_APPEAR_TO_CLOSE_MS = 2_500;
 /** "Not now" snoozes the tab for this long. */
