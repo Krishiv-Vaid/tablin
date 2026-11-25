@@ -1,65 +1,91 @@
 import { useState } from 'react';
 import { matchPatternsFor } from '../../detection/website-detector';
-import { createCustomSite } from '../../shared/settings';
+import { createCustomSite, siteDelaySeconds } from '../../shared/settings';
 import type { Settings, SiteRule } from '../../shared/types';
+import { DelayPicker } from '../../ui/components/DelayPicker';
 import { Toggle } from '../../ui/components/controls';
+import { WebsiteIcon } from '../../ui/components/WebsiteIcon';
 import { Section, type SettingsUpdater } from './Section';
 
-const DELAY_CHOICES = [null, 5, 8, 12, 20, 30, 45, 60] as const;
+function delaySummary(site: SiteRule, settings: Settings): string {
+  const seconds = siteDelaySeconds(settings, site);
+  if (site.delay.mode === 'inherit') return `${seconds}s · default`;
+  return site.delay.mode === 'custom' ? `${seconds}s · custom` : `${seconds}s`;
+}
 
 function SiteRow(props: {
   site: SiteRule;
-  globalDelay: number;
+  settings: Settings;
   onChange(patch: Partial<SiteRule>): void;
   onRemove?: () => void;
 }) {
-  const { site } = props;
+  const { site, settings } = props;
+  const [open, setOpen] = useState(false);
   return (
-    <div className="row site-row">
-      <div className="site-name">
-        <span className="site-badge" style={{ background: site.color }} aria-hidden="true">
-          {site.name.charAt(0).toUpperCase()}
-        </span>
-        <div className="row-label">
-          <span className="row-title">{site.name}</span>
-          <span className="row-desc">{site.domains.join(', ')} and subdomains</span>
+    <div className="site-block">
+      <div className="row site-row">
+        <div className="site-name">
+          <WebsiteIcon site={site} size={30} />
+          <div className="row-label">
+            <span className="row-title">{site.name}</span>
+            <span className="row-desc">{site.domains.join(', ')} and subdomains</span>
+          </div>
         </div>
-      </div>
-      <div className="site-controls">
-        <label className="select-wrap">
-          <span className="sr-only">Countdown for {site.name}</span>
-          <select
-            className="select"
-            value={site.delaySeconds === null ? 'default' : String(site.delaySeconds)}
-            onChange={(e) =>
-              props.onChange({
-                delaySeconds: e.target.value === 'default' ? null : Number(e.target.value),
-              })
-            }
-          >
-            {DELAY_CHOICES.map((d) => (
-              <option key={String(d)} value={d === null ? 'default' : String(d)}>
-                {d === null ? `Default (${props.globalDelay}s)` : `${d}s`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Toggle
-          checked={site.enabled}
-          label={`Watch ${site.name}`}
-          onChange={(enabled) => props.onChange({ enabled })}
-        />
-        {props.onRemove && (
+        <div className="site-controls">
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={props.onRemove}
-            aria-label={`Remove ${site.name}`}
+            className="delay-button"
+            aria-expanded={open}
+            aria-label={`Countdown for ${site.name}: ${delaySummary(site, settings)}. Change`}
+            onClick={() => setOpen(!open)}
           >
-            Remove
+            <span className="delay-value">{delaySummary(site, settings)}</span>
+            <svg
+              viewBox="0 0 10 6"
+              width="10"
+              height="6"
+              aria-hidden="true"
+              className={open ? 'flip' : ''}
+            >
+              <path
+                d="M1 1l4 4 4-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
-        )}
+          <Toggle
+            checked={site.enabled}
+            label={`Watch ${site.name}`}
+            onChange={(enabled) => props.onChange({ enabled })}
+          />
+          {props.onRemove && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={props.onRemove}
+              aria-label={`Remove ${site.name}`}
+            >
+              Remove
+            </button>
+          )}
+        </div>
       </div>
+      {open && (
+        <div className="site-delay">
+          <DelayPicker
+            value={site.delay}
+            globalSeconds={settings.delaySeconds}
+            label={`Countdown for ${site.name}`}
+            onChange={(delay) => props.onChange({ delay })}
+          />
+          <p className="row-desc">
+            Changes apply to the next countdown. One that's already running keeps its time.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -118,14 +144,14 @@ export function WebsitesSection({
     <Section
       id="websites"
       title="Websites"
-      intro="Choose which sites count as distractions. Subdomains are included."
+      intro={`Choose which sites count as distractions and how long you get on each. The global default is ${settings.delaySeconds}s (General).`}
     >
       <div className="card">
         {builtIn.map((site) => (
           <SiteRow
             key={site.id}
             site={site}
-            globalDelay={settings.delaySeconds}
+            settings={settings}
             onChange={(p) => patchSite(site.id, p)}
           />
         ))}
@@ -142,7 +168,7 @@ export function WebsitesSection({
             <SiteRow
               key={site.id}
               site={site}
-              globalDelay={settings.delaySeconds}
+              settings={settings}
               onChange={(p) => patchSite(site.id, p)}
               onRemove={() => void removeSite(site)}
             />
@@ -176,6 +202,10 @@ export function WebsitesSection({
           {message.text}
         </p>
       )}
+      <p className="row-desc legal-note">
+        Site logos are trademarks of their respective owners and are shown only to identify each
+        site. Tablin isn't affiliated with or endorsed by them.
+      </p>
     </Section>
   );
 }

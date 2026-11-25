@@ -1,13 +1,23 @@
+import { validateAchievements } from './achievements';
+import { STORAGE_SCHEMA_VERSION } from './constants';
+import { validateInventory } from './cosmetics';
 import { validateSettings } from './settings';
 import { emptyStats, validateStats } from './stats';
-import type {
-  EscalationState,
-  FocusSession,
-  LastClosedTab,
-  PauseState,
-  Settings,
-  Stats,
-  TabRecord,
+import {
+  FOCUS_KINDS,
+  type AchievementRecord,
+  type ActiveFocusSession,
+  type EscalationState,
+  type FocusHistoryEntry,
+  type FocusState,
+  type Inventory,
+  type LastClosedTab,
+  type PauseState,
+  type Settings,
+  type Stats,
+  type TabRecord,
+  type UnlockEvent,
+  type WatchSession,
 } from './types';
 
 /** The subset of chrome.storage.StorageArea Tablin uses; trivially fakeable in tests. */
@@ -24,12 +34,18 @@ export const LOCAL_KEYS = {
   pause: 'pause',
   escalation: 'escalation',
   lastClosed: 'lastClosed',
+  schemaVersion: 'schemaVersion',
+  focus: 'focus',
+  focusHistory: 'focusHistory',
+  achievements: 'achievements',
+  inventory: 'inventory',
+  unseenUnlocks: 'unseenUnlocks',
 } as const;
 
 /** chrome.storage.session — survives worker suspension, cleared when the browser quits. */
 export const SESSION_KEYS = {
   tabs: 'tabs',
-  focusSession: 'focusSession',
+  watchSession: 'watchSession',
   sessionPause: 'sessionPause',
   grace: 'grace',
 } as const;
@@ -54,6 +70,47 @@ function validateTabs(raw: unknown): Record<string, TabRecord> {
     }
   }
   return out;
+}
+
+const isKind = (v: unknown): v is FocusHistoryEntry['kind'] =>
+  typeof v === 'string' && (FOCUS_KINDS as readonly string[]).includes(v);
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function validateActive(raw: unknown): ActiveFocusSession | null {
+  if (!isObj(raw)) return null;
+  const { id, kind, status, durationMs, startedAt, endsAt, remainingMs } = raw;
+  if (typeof id !== 'string' || !isKind(kind)) return null;
+  if (status !== 'running' && status !== 'paused') return null;
+  if (!isNum(durationMs) || !isNum(startedAt) || !isNum(remainingMs)) return null;
+  if (status === 'running' && !isNum(endsAt)) return null;
+  return {
+    id,
+    kind,
+    status,
+    durationMs,
+    startedAt,
+    endsAt: status === 'running' ? (endsAt as number) : null,
+    remainingMs,
+  };
+}
+
+export function validateHistoryEntry(raw: unknown): FocusHistoryEntry | null {
+  if (!isObj(raw)) return null;
+  const { id, kind, outcome, startedAt, endedAt, plannedMs, focusedMs, day } = raw;
+  if (typeof id !== 'string' || !isKind(kind)) return null;
+  if (outcome !== 'completed' && outcome !== 'ended') return null;
+  if (!isNum(startedAt) || !isNum(endedAt) || !isNum(plannedMs) || !isNum(focusedMs)) return null;
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  return { id, kind, outcome, startedAt, endedAt, plannedMs, focusedMs, day };
+}
+
+export function validateFocusState(raw: unknown): FocusState {
+  if (!isObj(raw)) return { current: null, cycleCount: 0, celebrate: null };
+  return {
+    current: validateActive(raw.current),
+    cycleCount: isNum(raw.cycleCount) && raw.cycleCount >= 0 ? Math.floor(raw.cycleCount) : 0,
+    celebrate: validateHistoryEntry(raw.celebrate),
+  };
 }
 
 /** Typed, validated access to everything Tablin persists. */
@@ -90,8 +147,12 @@ export class TablinStore {
     await this.local.set({ [LOCAL_KEYS.stats]: stats });
   }
 
+  /**
+   * Clears counters, focus history and escalation. Achievements and unlocked
+   * cosmetics are kept: they were earned, and resetting numbers shouldn't take them away.
+   */
   async resetStats(): Promise<void> {
-    await this.local.set({ [LOCAL_KEYS.stats]: emptyStats() });
+    await this.local.set({ [LOCAL_KEYS.stats]: emptyStats(), [LOCAL_KEYS.focusHistory]: [] });
     await this.local.remove([LOCAL_KEYS.escalation]);
   }
 
@@ -145,15 +206,88 @@ export class TablinStore {
     await this.session.set({ [SESSION_KEYS.tabs]: tabs });
   }
 
-  async getFocusSession(): Promise<FocusSession | null> {
-    const raw = await this.getOne(this.session, SESSION_KEYS.focusSession);
+  async getWatchSession(): Promise<WatchSession | null> {
+    const raw = await this.getOne(this.session, SESSION_KEYS.watchSession);
     return isObj(raw) && typeof raw.id === 'string' && typeof raw.startedAt === 'number'
-      ? (raw as unknown as FocusSession)
+      ? (raw as unknown as WatchSession)
       : null;
   }
 
-  async setFocusSession(session: FocusSession): Promise<void> {
-    await this.session.set({ [SESSION_KEYS.focusSession]: session });
+  async setWatchSession(session: WatchSession): Promise<void> {
+    await this.session.set({ [SESSION_KEYS.watchSession]: session });
+  }
+
+  // ---- V2: focus, achievements, inventory -----------------------------------
+
+  async getFocus(): Promise<FocusState> {
+    return validateFocusState(await this.getOne(this.local, LOCAL_KEYS.focus));
+  }
+
+  async setFocus(state: FocusState): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.focus]: state });
+  }
+
+  async getFocusHistory(): Promise<FocusHistoryEntry[]> {
+    const raw = await this.getOne(this.local, LOCAL_KEYS.focusHistory);
+    return Array.isArray(raw)
+      ? raw.map(validateHistoryEntry).filter((e): e is FocusHistoryEntry => e !== null)
+      : [];
+  }
+
+  async setFocusHistory(history: FocusHistoryEntry[]): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.focusHistory]: history });
+  }
+
+  async getAchievements(): Promise<AchievementRecord> {
+    return validateAchievements(await this.getOne(this.local, LOCAL_KEYS.achievements));
+  }
+
+  async setAchievements(record: AchievementRecord): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.achievements]: record });
+  }
+
+  async getInventory(): Promise<Inventory> {
+    return validateInventory(await this.getOne(this.local, LOCAL_KEYS.inventory));
+  }
+
+  async setInventory(inventory: Inventory): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.inventory]: inventory });
+  }
+
+  /** Unlocks the user hasn't seen celebrated in the UI yet. */
+  async getUnseenUnlocks(): Promise<UnlockEvent[]> {
+    const raw = await this.getOne(this.local, LOCAL_KEYS.unseenUnlocks);
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (e): e is UnlockEvent =>
+        isObj(e) &&
+        typeof e.achievementId === 'string' &&
+        isNum(e.at) &&
+        (e.rewardId === null || typeof e.rewardId === 'string'),
+    );
+  }
+
+  async setUnseenUnlocks(events: UnlockEvent[]): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.unseenUnlocks]: events.slice(-20) });
+  }
+
+  async getSchemaVersion(): Promise<number> {
+    const raw = await this.getOne(this.local, LOCAL_KEYS.schemaVersion);
+    return isNum(raw) ? raw : 0;
+  }
+
+  async setSchemaVersion(version: number): Promise<void> {
+    await this.local.set({ [LOCAL_KEYS.schemaVersion]: version });
+  }
+
+  /** True when this storage has never been written by any version of Tablin. */
+  async isFresh(): Promise<boolean> {
+    const r = await this.local.get([
+      LOCAL_KEYS.settings,
+      LOCAL_KEYS.stats,
+      LOCAL_KEYS.schemaVersion,
+    ]);
+    return Object.keys(r).length === 0;
   }
 
   /** Tabs reopened via "undo" get a grace period: tabId → epoch ms. */
@@ -190,6 +324,8 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
   await chrome.storage.local.set({ [LOCAL_KEYS.settings]: valid });
   return valid;
 }
+
+export { STORAGE_SCHEMA_VERSION };
 
 export async function loadStats(): Promise<Stats> {
   const raw = await chrome.storage.local.get([LOCAL_KEYS.stats]);

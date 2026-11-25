@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Tablin",
   "short_name": "Tablin",
-  "version": "0.1.0",
-  "description": "A tiny companion that walks over and nudges you off distracting sites. Drag it back, it slingshots forward.",
+  "version": "2.0.0",
+  "description": "A tiny companion that nudges you off distracting sites, keeps you company through focus sessions, and earns little rewards along the way.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon-16.png",
@@ -29,6 +29,7 @@
     "type": "module"
   },
   "permissions": ["storage", "alarms", "scripting"],
+  "optional_permissions": ["notifications"],
   "host_permissions": [
     "*://instagram.com/*",
     "*://*.instagram.com/*",
@@ -66,15 +67,21 @@
   ],
   "commands": {
     "emergency-stop": {
-      "suggested_key": { "default": "Alt+Shift+S" },
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
       "description": "Emergency stop: send Tablin away and pause until resumed"
     },
     "quick-pause": {
-      "suggested_key": { "default": "Alt+Shift+P" },
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
       "description": "Pause Tablin for your default pause duration"
     },
     "reopen-last": {
-      "suggested_key": { "default": "Alt+Shift+Z" },
+      "suggested_key": {
+        "default": "Alt+Shift+Z"
+      },
       "description": "Reopen the last tab Tablin closed"
     }
   },

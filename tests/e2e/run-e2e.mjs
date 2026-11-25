@@ -176,6 +176,7 @@ async function overlayInfo(page) {
     let character = null;
     let bubble = null;
     const buttons = [];
+    const cosmetics = [];
     let hostFound = false;
     const attrs = (n) =>
       Object.fromEntries(
@@ -190,6 +191,7 @@ async function overlayInfo(page) {
       const a = attrs(n);
       const cls = a.class ?? '';
       if (cls.includes('tb-character')) character = { node: n, ...a };
+      if (a['data-cosmetic']) cosmetics.push(a['data-cosmetic']);
       if (cls.includes('tb-bubble') && cls.includes('tb-on')) bubble = { node: n, text: text(n) };
       if (n.nodeName === 'BUTTON' && cls.includes('tb-btn'))
         buttons.push({ node: n, text: text(n) });
@@ -222,6 +224,7 @@ async function overlayInfo(page) {
       center,
       bubble: bubble?.text ?? null,
       buttons: visibleButtons,
+      cosmetics,
     };
   } finally {
     await cdp.detach();
@@ -497,6 +500,238 @@ async function main() {
     await page.close();
   });
 
+  // ---------------------------------------------------------------------------
+  // V2
+
+  const msg = (m) => inExt(ext, (x) => chrome.runtime.sendMessage(x), m);
+  const local = (key) => inExt(ext, async (k) => (await chrome.storage.local.get(k))[k], key);
+
+  await check(
+    'V2 websites: brand logos render and a custom 27-second delay is set through the picker',
+    async () => {
+      await ext.setViewport({ width: 1180, height: 900 });
+      await ext.reload({ waitUntil: 'domcontentloaded' });
+      await ext.waitForSelector('#websites svg.site-icon[data-site="instagram"]');
+      const logos = await ext.$$eval('#websites .site-icon', (els) =>
+        els.map((e) => e.getAttribute('data-site')),
+      );
+      for (const id of ['instagram', 'tiktok', 'youtube', 'facebook', 'reddit', 'x'])
+        assert(logos.includes(id), `logo ${id}`);
+      await ext.click('#websites button[aria-label^="Countdown for YouTube:"]');
+      await ext.waitForSelector('#websites .site-delay .chip');
+      const chips = await ext.$$('#websites .site-delay .chip');
+      await chips[chips.length - 1].click(); // Custom
+      const input = await ext.waitForSelector(
+        'input[aria-label="Countdown for YouTube: custom seconds"]',
+      );
+      await input.click({ clickCount: 3 });
+      await input.type('4');
+      await waitFor(
+        async () =>
+          (await ext.$eval('.custom-delay .field-hint', (e) => e.textContent)).includes(
+            'between 5 and 60',
+          ),
+        { message: 'validation error' },
+      );
+      await input.click({ clickCount: 3 });
+      await input.type('27');
+      await waitFor(
+        async () => {
+          const yt = (await local('settings')).sites.find((x) => x.id === 'youtube');
+          return yt.delay.mode === 'custom' && yt.delay.seconds === 27;
+        },
+        { message: 'custom 27 saved' },
+      );
+      await ext.evaluate(() => document.getElementById('websites').scrollIntoView());
+      await sleep(300);
+      await ext.screenshot({ path: join(shots, 'v2-websites.png') });
+      const page = await openSite(browser, 'https://www.youtube.com/watch?v=custom');
+      const status = await waitFor(
+        async () => {
+          const st = await msg({ type: 'GET_STATUS' });
+          return st.activeTab?.siteId === 'youtube' ? st : null;
+        },
+        { message: 'youtube tracked' },
+      );
+      assert(status.activeTab.delaySeconds === 27, `delaySeconds ${status.activeTab.delaySeconds}`);
+      await page.close();
+    },
+  );
+
+  await check(
+    'V2 focus: start a custom session from the popup, close the popup, it keeps running; pause & resume',
+    async () => {
+      const popup = await extPage(browser, extId, 'popup/index.html');
+      await popup.setViewport({ width: 380, height: 640 });
+      await popup.waitForSelector('.popup-tabs');
+      await popup.click('.popup-tabs button:nth-child(2)');
+      await popup.waitForSelector('.focus-presets .chip');
+      const chips = await popup.$$('.focus-presets .chip');
+      await chips[chips.length - 1].click();
+      const input = await popup.waitForSelector('input[aria-label="Custom length in minutes"]');
+      await input.type('1');
+      await popup.click('.focus-panel .btn-lg');
+      await popup.waitForSelector('.focus-time');
+      await sleep(1200);
+      await popup.screenshot({
+        path: join(shots, 'v2-popup-focus.png'),
+        clip: {
+          x: 0,
+          y: 0,
+          width: 348,
+          height: await popup.$eval('main', (m) => m.getBoundingClientRect().height),
+        },
+      });
+      await popup.close();
+      await sleep(3000);
+      let snap = await msg({ type: 'FOCUS_GET' });
+      assert(snap.current?.status === 'running', 'running with popup closed');
+      assert(
+        snap.remainingMs < 57_500 && snap.remainingMs > 40_000,
+        `remaining ${snap.remainingMs}`,
+      );
+      const again = await extPage(browser, extId, 'popup/index.html');
+      await again.waitForSelector('.tab-badge');
+      await again.click('.popup-tabs button:nth-child(2)');
+      await again.waitForSelector('.focus-actions .btn');
+      await again.click('.focus-actions .btn'); // Pause
+      await waitFor(async () => (await msg({ type: 'FOCUS_GET' })).current?.status === 'paused', {
+        message: 'paused',
+      });
+      const pausedAt = (await msg({ type: 'FOCUS_GET' })).remainingMs;
+      await sleep(2500);
+      snap = await msg({ type: 'FOCUS_GET' });
+      assert(Math.abs(snap.remainingMs - pausedAt) < 50, 'paused time does not tick');
+      await again.click('.focus-actions .btn'); // Resume
+      await waitFor(async () => (await msg({ type: 'FOCUS_GET' })).current?.status === 'running', {
+        message: 'resumed',
+      });
+      await again.close();
+    },
+  );
+
+  await check(
+    'V2 focus: completes on its own (popup closed), celebrates, records stats, unlocks First Focus + Party Hat',
+    async () => {
+      const snap = await waitFor(
+        async () => {
+          const x = await msg({ type: 'FOCUS_GET' });
+          return x.celebrate ? x : null;
+        },
+        { timeout: 90_000, interval: 1000, message: 'focus completion' },
+      );
+      assert(
+        snap.celebrate.kind === 'focus' && snap.celebrate.outcome === 'completed',
+        'completed',
+      );
+      const stats = await local('stats');
+      assert(stats.totalFocusSessions === 1, `sessions ${stats.totalFocusSessions}`);
+      assert(Math.abs(stats.totalFocusMinutes - 1) < 0.01, `minutes ${stats.totalFocusMinutes}`);
+      const achievements = await local('achievements');
+      assert(achievements['first-focus'], 'first-focus unlocked');
+      const inv = await local('inventory');
+      assert(inv.unlocked['hat:party'], 'party hat unlocked');
+      assert(!inv.unlocked['hat:crown'], 'no unearned rewards');
+      const popup = await extPage(browser, extId, 'popup/index.html');
+      await popup.setViewport({ width: 380, height: 640 });
+      await popup.waitForSelector('.unlock-toast');
+      await popup.click('.popup-tabs button:nth-child(2)');
+      await popup.waitForSelector('.focus-cheer');
+      await sleep(700);
+      await popup.screenshot({
+        path: join(shots, 'v2-popup-celebrate.png'),
+        clip: {
+          x: 0,
+          y: 0,
+          width: 348,
+          height: await popup.$eval('main', (m) => m.getBoundingClientRect().height),
+        },
+      });
+      const buttons = await popup.$$('.focus-actions .btn');
+      await buttons[buttons.length - 1].click(); // Done
+      await waitFor(async () => (await msg({ type: 'FOCUS_GET' })).celebrate === null, {
+        message: 'acknowledged',
+      });
+      await popup.close();
+      // Only one completion recorded even after more ticks.
+      await msg({ type: 'FOCUS_GET' });
+      assert((await local('focusHistory')).length === 1, 'single history entry');
+    },
+  );
+
+  await check('V2 collection: equip the Party Hat; achievements & collection render', async () => {
+    await ext.reload({ waitUntil: 'domcontentloaded' });
+    await ext.waitForSelector('#collection .item');
+    await ext.click('#collection button[aria-label^="Party Hat."]');
+    await waitFor(async () => (await local('inventory')).equipped.hat === 'hat:party', {
+      message: 'hat equipped',
+    });
+    // Locked items can't be equipped.
+    await ext.click('#collection button[aria-label^="Little Crown."]');
+    await sleep(500);
+    assert((await local('inventory')).equipped.hat === 'hat:party', 'locked crown not equipped');
+    await ext.evaluate(() => document.getElementById('collection').scrollIntoView());
+    await sleep(500);
+    await ext.screenshot({ path: join(shots, 'v2-collection.png') });
+    await ext.evaluate(() => document.getElementById('achievements').scrollIntoView());
+    await sleep(400);
+    await ext.screenshot({ path: join(shots, 'v2-achievements.png') });
+    await ext.evaluate(() => document.getElementById('statistics').scrollIntoView());
+    await sleep(400);
+    await ext.screenshot({ path: join(shots, 'v2-statistics.png') });
+    await ext.evaluate(() => window.scrollTo(0, 0));
+    await sleep(400);
+    await ext.screenshot({ path: join(shots, 'v2-focus.png') });
+  });
+
+  await check(
+    'V2 regression: the hatted character still walks, charges and slingshots; safety window intact',
+    async () => {
+      const page = await openSite(browser, 'https://www.instagram.com/explore/');
+      const info = await waitFor(
+        async () => {
+          const i = await overlayInfo(page);
+          return i.mode === 'moving' && i.center ? i : null;
+        },
+        { timeout: 30000, message: 'character moving' },
+      );
+      assert(info.cosmetics.includes('hat:party'), `hat on page (${info.cosmetics})`);
+      await sleep(900);
+      const later = await overlayInfo(page);
+      assert(later.center.x > info.center.x + 20, 'walks toward the exit');
+      await page.screenshot({ path: join(shots, 'v2-hat-walking.png') });
+      const start = later.center;
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 40; i++) {
+        await page.mouse.move(start.x - i * 6, start.y + i * 3);
+        await sleep(30);
+      }
+      await sleep(400);
+      assert((await overlayInfo(page)).state === 'charging', 'charging');
+      await page.mouse.up();
+      await waitFor(async () => (await overlayInfo(page)).mode === 'launching', {
+        timeout: 2000,
+        interval: 30,
+        message: 'launching',
+      });
+      await sleep(300);
+      assert(await tabExists(browser, page), 'no instant close on release');
+      await waitFor(async () => /Closing this tab/.test((await overlayInfo(page)).bubble ?? ''), {
+        timeout: 8000,
+        message: 'cancel window',
+      });
+      assert(
+        (await overlayInfo(page)).cosmetics.includes('hat:party'),
+        'hat still attached after slingshot',
+      );
+      await clickButton(page, 'Keep this tab');
+      await sleep(4000);
+      assert(await tabExists(browser, page), 'kept');
+      await page.close();
+    },
+  );
+
   await check('settings page: choosing a color persists', async () => {
     await ext.setViewport({ width: 1180, height: 900 });
     await ext.reload({ waitUntil: 'domcontentloaded' });
@@ -523,6 +758,17 @@ async function main() {
     assert(settings.delaySeconds === 5, 'delay persisted');
     const stats = (await inExt(page, () => chrome.storage.local.get('stats'))).stats;
     assert(stats.totalClosed >= 1, 'stats persisted');
+    // V2 data
+    const yt = settings.sites.find((x) => x.id === 'youtube');
+    assert(yt.delay.mode === 'custom' && yt.delay.seconds === 27, 'custom delay persisted');
+    const v2 = await inExt(page, () =>
+      chrome.storage.local.get(['inventory', 'achievements', 'focusHistory', 'schemaVersion']),
+    );
+    assert(v2.inventory.equipped.hat === 'hat:party', 'equipped hat persisted');
+    assert(v2.achievements['first-focus'], 'achievements persisted');
+    assert(v2.focusHistory.length === 1, 'focus history persisted');
+    assert(v2.schemaVersion === 2, 'schema v2');
+    assert(stats.totalFocusSessions === 1, 'focus stats persisted');
   });
 
   await browser.close();

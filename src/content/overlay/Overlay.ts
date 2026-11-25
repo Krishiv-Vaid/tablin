@@ -174,6 +174,7 @@ export class Overlay {
         name: c.name,
         mode: 'stage',
         interactive: true,
+        cosmetics: plan.cosmetics,
       },
       {
         onArrived: () => this.arrived(),
@@ -240,6 +241,7 @@ export class Overlay {
   update(plan: ApproachPlan): void {
     this.plan = plan;
     this.character.setColor(plan.character.color);
+    this.character.setCosmetics(plan.cosmetics);
     this.character.setSound(plan.behavior.soundEnabled);
     this.character.setIntensity(plan.character.intensity);
     this.applyAccent(plan);

@@ -66,6 +66,51 @@ transition table. Every accepted transition cross-fades poses over ~180 ms.
 max ≤ 3. The countdown shrinks by `[1, .85, .7, .6, .5]` per level, never below 4 s (or the configured
 delay if that's shorter). Periods: local calendar day, or browser session.
 
+## Focus sessions (V2)
+
+```
+            FOCUS_START(kind, minutes)
+ idle ─────────────────────────────▶ running {startedAt, endsAt}
+                                      │   ▲
+                         FOCUS_PAUSE  │   │ FOCUS_RESUME (endsAt = now + remainingMs)
+                                      ▼   │
+                                    paused {remainingMs}
+ running ── endsAt reached (alarm / backup timer / any status read) ──▶ completed
+          └─ FOCUS_END ─▶ ended early (time credited, not a completed session)
+```
+
+Completion is idempotent: the session id is checked against history before anything is recorded.
+Completed focus sessions update `stats.days[endDay]` (minutes, sessions, qualifying ≥ 5 min) and
+the longest streak, then `syncProgress()` evaluates achievements and grants rewards. All of this
+runs inside the single `Serial` lock shared with the distraction manager.
+
+## Achievements, rewards & cosmetics
+
+`computeMetrics(stats)` → `{completedSessions, longestSessionMinutes, bestWeekSessions,
+longestStreak, totalIntercepted, totalFocusMinutes}` → `evaluateAchievements()` unlocks anything whose
+threshold is met and not yet unlocked, and grants its cosmetic. Cosmetics render as SVG groups in
+rig slots (`hatSlot` and `accessorySlot` inside the body group, `effectSlot` and `celebrationSlot`
+inside the whole-character group), so they inherit every existing transform.
+
+## Storage schema & migration
+
+| Key (local)     | Since | Contents                                                                          |
+| --------------- | ----- | --------------------------------------------------------------------------------- |
+| `schemaVersion` | 2     | `2`                                                                               |
+| `settings`      | 1     | v2 adds `sites[].delay` (DelayConfig) and `focus`                                 |
+| `stats`         | 1     | v2 adds focus fields per day, `totalWatchSessions`, focus totals, `longestStreak` |
+| `focus`         | 2     | current session, cycle count, pending celebration                                 |
+| `focusHistory`  | 2     | last 500 sessions                                                                 |
+| `achievements`  | 2     | id → unlocked-at                                                                  |
+| `inventory`     | 2     | unlocked cosmetics + equipped slots                                               |
+| `unseenUnlocks` | 2     | unlocks not yet celebrated in the UI                                              |
+
+`migrateStorage()` (v0/v1 → v2) rewrites settings through the v1-aware validator: per-site
+`delaySeconds` becomes a preset or custom `DelayConfig`, and `null` becomes inherit. It moves the
+v1 `totalFocusSessions` (browser sessions) to `totalWatchSessions`, initialises the new keys only
+if they're missing, unlocks achievements that existing data genuinely earned, and stamps
+`schemaVersion: 2`. Re-running it changes nothing.
+
 ## Future native companion
 
 The `character/` engine has no `chrome.*` dependencies. A macOS app (SwiftUI/AppKit) can host it in a

@@ -19,9 +19,10 @@ export function AboutSection() {
           <div className="row-label">
             <span className="row-title">Privacy</span>
             <span className="row-desc">
-              Everything stays on this device: settings, counters and the last closed tab's address
-              (kept for 10 minutes so you can reopen it). There are no accounts, no analytics, no
-              ads and no network requests. Tablin only runs on the sites you enable.
+              Everything stays on this device: settings, counters, focus history, achievements, your
+              companion's wardrobe, and the last closed tab's address (kept for 10 minutes so you
+              can reopen it). There are no accounts, no analytics, no ads and no network requests.
+              Tablin only runs on the sites you enable.
             </span>
           </div>
         </div>

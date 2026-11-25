@@ -98,6 +98,10 @@ export function Welcome(props: { settings: Settings; update: SettingsUpdater; on
                 Press <kbd>Esc</kbd> or choose <em>Not now</em> any time to send {name} away for 5
                 minutes.
               </li>
+              <li>
+                Start a <strong>focus session</strong> from the popup and {name} keeps you company,
+                earning achievements and little rewards to wear along the way.
+              </li>
             </ul>
             <p className="note">
               Chrome doesn't let extensions draw over its own tab strip, so {name} lives inside the

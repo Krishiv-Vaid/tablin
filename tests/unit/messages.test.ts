@@ -56,3 +56,28 @@ describe('message passing', () => {
     await expect(route({ type: 'NOPE' }, page)).rejects.toThrow(/Unrecognised/);
   });
 });
+
+describe('V2 messages', () => {
+  it('validates focus and equip messages', () => {
+    expect(isTablinMessage({ type: 'FOCUS_START', kind: 'focus' })).toBe(true);
+    expect(isTablinMessage({ type: 'FOCUS_START', kind: 'focus', minutes: 27 })).toBe(true);
+    expect(isTablinMessage({ type: 'FOCUS_START', kind: 'nap' })).toBe(false);
+    expect(isTablinMessage({ type: 'FOCUS_START', kind: 'focus', minutes: 2.5 })).toBe(false);
+    expect(isTablinMessage({ type: 'EQUIP', slot: 'hat', id: 'hat:party' })).toBe(true);
+    expect(isTablinMessage({ type: 'EQUIP', slot: 'hat', id: null })).toBe(true);
+    expect(isTablinMessage({ type: 'EQUIP', slot: 'shoes', id: 'x' })).toBe(false);
+  });
+
+  it('focus, equip and progress commands are refused from web pages', async () => {
+    const route = createRouter(handlers());
+    for (const msg of [
+      { type: 'FOCUS_START', kind: 'focus' },
+      { type: 'EQUIP', slot: 'hat', id: null },
+      { type: 'PROGRESS_GET' },
+      { type: 'ACK_UNLOCKS' },
+    ]) {
+      await expect(route(msg, content)).rejects.toThrow(/Unexpected sender/);
+      await expect(route(msg, page)).resolves.toBeDefined();
+    }
+  });
+});

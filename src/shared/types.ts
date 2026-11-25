@@ -9,7 +9,10 @@ export const CHARACTER_COLORS = [
   'yellow',
   'red',
 ] as const;
-export type CharacterColor = (typeof CHARACTER_COLORS)[number];
+/** Colors earned through achievements (cosmetic only). */
+export const UNLOCKABLE_COLORS = ['pastel'] as const;
+export const ALL_CHARACTER_COLORS = [...CHARACTER_COLORS, ...UNLOCKABLE_COLORS] as const;
+export type CharacterColor = (typeof ALL_CHARACTER_COLORS)[number];
 
 export const CHARACTER_SIZES = ['small', 'medium', 'large'] as const;
 export type CharacterSize = (typeof CHARACTER_SIZES)[number];
@@ -38,6 +41,18 @@ export type DefaultPause = '15m' | '1h';
 export const CHARACTER_DESIGNS = ['tablin'] as const;
 export type CharacterDesignId = (typeof CHARACTER_DESIGNS)[number];
 
+/** Countdown preset choices offered per site (seconds). */
+export const DELAY_PRESETS = [5, 10, 15, 20, 30, 45, 60] as const;
+
+/**
+ * Per-site countdown configuration.
+ * inherit – use the global default (follows it when it changes)
+ * preset  – one of DELAY_PRESETS
+ * custom  – any whole number of seconds within the allowed range
+ */
+export type DelayConfig =
+  { mode: 'inherit' } | { mode: 'preset'; seconds: number } | { mode: 'custom'; seconds: number };
+
 export interface SiteRule {
   id: string;
   name: string;
@@ -46,8 +61,7 @@ export interface SiteRule {
   enabled: boolean;
   /** Accent used in the settings list. */
   color: string;
-  /** Per-site countdown override in seconds, or null to use the global delay. */
-  delaySeconds: number | null;
+  delay: DelayConfig;
   builtIn: boolean;
 }
 
@@ -73,8 +87,25 @@ export interface BehaviorSettings {
   switchAway: SwitchAwayBehavior;
 }
 
+export interface FocusSettings {
+  /** Default focus length, minutes (1–240). */
+  focusMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  /** A long break is suggested after this many completed focus sessions. */
+  sessionsBeforeLongBreak: number;
+  /** Start the suggested break automatically when a focus session completes. */
+  autoStartBreaks: boolean;
+  /** Don't intercept distracting sites during breaks. */
+  relaxDuringBreaks: boolean;
+  /** Show a Chrome notification when a session ends. */
+  notifications: boolean;
+}
+
+export const SETTINGS_SCHEMA_VERSION = 2;
+
 export interface Settings {
-  schemaVersion: 1;
+  schemaVersion: 2;
   enabled: boolean;
   /** Off by default: new installs start in nudge mode. */
   autoClose: boolean;
@@ -83,6 +114,7 @@ export interface Settings {
   sites: SiteRule[];
   character: CharacterSettings;
   behavior: BehaviorSettings;
+  focus: FocusSettings;
   onboardingComplete: boolean;
 }
 
@@ -135,19 +167,122 @@ export interface DayStats {
   closed: number;
   snoozed: number;
   reminders: number;
+  /** Minutes focused that day (completed sessions + time from sessions ended early). */
+  focusMinutes: number;
+  /** Completed focus sessions. */
+  focusSessions: number;
+  /** Completed focus sessions long enough to count toward the streak. */
+  qualifyingSessions: number;
 }
 
 export interface Stats {
   days: Record<string, DayStats>;
   totalIntercepted: number;
   totalClosed: number;
+  /** Browser sessions Tablin has watched (v1 called these "focus sessions"). */
+  totalWatchSessions: number;
+  /** Completed focus-timer sessions. */
   totalFocusSessions: number;
+  totalFocusMinutes: number;
+  longestFocusMinutes: number;
+  longestStreak: number;
 }
 
-export interface FocusSession {
+/** A browser session (or the time since resuming from a pause), used for escalation. */
+export interface WatchSession {
   id: string;
   startedAt: number;
   intercepted: number;
+}
+
+// ---- Focus sessions ---------------------------------------------------------
+
+export const FOCUS_KINDS = ['focus', 'shortBreak', 'longBreak'] as const;
+export type FocusKind = (typeof FOCUS_KINDS)[number];
+
+export interface ActiveFocusSession {
+  id: string;
+  kind: FocusKind;
+  status: 'running' | 'paused';
+  /** Planned length. */
+  durationMs: number;
+  startedAt: number;
+  /** When it will complete (while running). */
+  endsAt: number | null;
+  /** Time left (while paused). */
+  remainingMs: number;
+}
+
+export interface FocusHistoryEntry {
+  id: string;
+  kind: FocusKind;
+  /** completed – ran to the end; ended – stopped early by the user (never penalised). */
+  outcome: 'completed' | 'ended';
+  startedAt: number;
+  endedAt: number;
+  plannedMs: number;
+  /** Time actually spent (excluding pauses). */
+  focusedMs: number;
+  /** Local calendar day it ended on (fixed at the time, so timezone changes don't rewrite history). */
+  day: string;
+}
+
+export interface FocusState {
+  current: ActiveFocusSession | null;
+  /** Completed focus sessions since the last long break. */
+  cycleCount: number;
+  /** Last completed session, until the user has seen the celebration. */
+  celebrate: FocusHistoryEntry | null;
+}
+
+export interface FocusSnapshot {
+  now: number;
+  current: ActiveFocusSession | null;
+  /** Remaining ms for the current session (derived from timestamps). */
+  remainingMs: number;
+  celebrate: FocusHistoryEntry | null;
+  nextBreak: 'shortBreak' | 'longBreak';
+  cycleCount: number;
+  settings: FocusSettings;
+  streak: StreakInfo;
+  today: { focusMinutes: number; focusSessions: number };
+  history: FocusHistoryEntry[];
+}
+
+export interface StreakInfo {
+  current: number;
+  longest: number;
+  lastQualifyingDay: string | null;
+  /** Whether today already has a qualifying session. */
+  todayDone: boolean;
+}
+
+// ---- Achievements & cosmetics ----------------------------------------------
+
+export type AchievementCategory = 'focus' | 'streaks' | 'distractions' | 'time';
+
+export type CosmeticSlot = 'color' | 'hat' | 'accessory' | 'effect' | 'celebration';
+
+export interface Equipped {
+  hat: string | null;
+  accessory: string | null;
+  effect: string | null;
+  celebration: string | null;
+}
+
+export interface Inventory {
+  /** Cosmetic id → epoch ms it was unlocked. */
+  unlocked: Record<string, number>;
+  equipped: Equipped;
+}
+
+/** Achievement id → epoch ms it was unlocked. */
+export type AchievementRecord = Record<string, number>;
+
+export interface UnlockEvent {
+  achievementId: string;
+  rewardId: string | null;
+  at: number;
 }
 
 export type Gait = 'walk' | 'run';
@@ -163,6 +298,10 @@ export interface ApproachPlan {
   autoClose: boolean;
   siteName: string;
   character: CharacterSettings;
+  /** Equipped cosmetics, already filtered to what's unlocked. */
+  cosmetics: Equipped;
+  /** A focus session is running: the character says so. */
+  focusActive: boolean;
   behavior: Pick<BehaviorSettings, 'slingshotEnabled' | 'soundEnabled' | 'reducedMotion' | 'speed'>;
 }
 
@@ -195,10 +334,11 @@ export interface StatusSnapshot {
   onboardingComplete: boolean;
   defaultPause: DefaultPause;
   pause: PauseState | null;
+  /** Distractions aren't intercepted right now because a break is running. */
+  relaxing: boolean;
   today: DayStats;
-  streak: number;
-  totalFocusSessions: number;
-  session: FocusSession;
+  streak: StreakInfo;
+  session: WatchSession;
   escalation: {
     enabled: boolean;
     count: number;
@@ -206,7 +346,22 @@ export interface StatusSnapshot {
     nextSpeedMultiplier: number;
     resetFrequency: ResetFrequency;
   };
-  activeTab: { siteName: string; phase: TabPhase; dueAt: number | null } | null;
+  activeTab: {
+    siteId: string;
+    siteName: string;
+    phase: TabPhase;
+    dueAt: number | null;
+    /** The site's configured countdown (seconds). */
+    delaySeconds: number;
+  } | null;
   lastClosed: LastClosedTab | null;
   character: CharacterSettings;
+  cosmetics: Equipped;
+  focus: {
+    kind: FocusKind;
+    status: 'running' | 'paused';
+    endsAt: number | null;
+    remainingMs: number;
+  } | null;
+  achievements: { unlocked: number; total: number; unseen: number };
 }

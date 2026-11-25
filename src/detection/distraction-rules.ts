@@ -12,7 +12,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['instagram.com'],
     enabled: true,
     color: '#E1306C',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
   {
@@ -21,7 +21,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['tiktok.com'],
     enabled: true,
     color: '#25F4EE',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
   {
@@ -30,7 +30,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['youtube.com'],
     enabled: true,
     color: '#FF0033',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
   {
@@ -39,7 +39,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['facebook.com'],
     enabled: true,
     color: '#1877F2',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
   {
@@ -48,7 +48,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['reddit.com'],
     enabled: true,
     color: '#FF4500',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
   {
@@ -57,7 +57,7 @@ export const BUILT_IN_SITES: readonly SiteRule[] = [
     domains: ['x.com'],
     enabled: true,
     color: '#71767B',
-    delaySeconds: null,
+    delay: { mode: 'inherit' },
     builtIn: true,
   },
 ];

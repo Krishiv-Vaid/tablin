@@ -38,6 +38,13 @@ export interface Rig {
   sweat: SVGPathElement;
   zzz: SVGGElement;
   tension: SVGCircleElement;
+  /** The leafy tuft (hidden while a hat covers it). */
+  tuft: SVGPathElement;
+  /** Cosmetic layers. Hat/accessory live inside `body`, so they inherit every bob, squash and lean. */
+  hatSlot: SVGGElement;
+  accessorySlot: SVGGElement;
+  effectSlot: SVGGElement;
+  celebrationSlot: SVGGElement;
   tensionTrack: SVGCircleElement;
   /** Elements recoloured when the palette changes. */
   paint: {
@@ -294,6 +301,12 @@ function buildRig(doc: Document): Rig {
     body,
   );
 
+  // Cosmetic slots (empty by default, so the base character is unchanged).
+  const accessorySlot = el(doc, 'g', { class: 'tb-slot-accessory' }, body);
+  const hatSlot = el(doc, 'g', { class: 'tb-slot-hat' }, body);
+  const effectSlot = el(doc, 'g', { class: 'tb-slot-effect' }, whole);
+  const celebrationSlot = el(doc, 'g', { class: 'tb-slot-celebration' }, whole);
+
   const zzz = el(doc, 'g', { class: 'tb-zzz', fill: INK }, whole);
   const letters: [string, number, number, number][] = [
     ['z', 74, 30, 10],
@@ -325,6 +338,11 @@ function buildRig(doc: Document): Rig {
     zzz,
     tension,
     tensionTrack,
+    tuft,
+    hatSlot,
+    accessorySlot,
+    effectSlot,
+    celebrationSlot,
     paint,
   };
 }

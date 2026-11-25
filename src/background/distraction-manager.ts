@@ -6,12 +6,16 @@ import {
   SNOOZE_MS,
 } from '../shared/constants';
 import { matchSite } from '../detection/website-detector';
-import { baseDelayMs } from '../shared/settings';
-import { bumpDay, computeStreak, pruneStats, todayStats, touchDay } from '../shared/stats';
+import { ACHIEVEMENTS } from '../shared/achievements';
+import { effectiveColor, effectiveEquipped } from '../shared/cosmetics';
+import { baseDelayMs, siteDelaySeconds } from '../shared/settings';
+import { bumpDay, focusStreak, pruneStats, todayStats, touchDay } from '../shared/stats';
 import type { TablinStore } from '../shared/storage';
 import type {
   CloseResult,
-  FocusSession,
+  FocusState,
+  Inventory,
+  WatchSession,
   LastClosedTab,
   PauseMode,
   PauseState,
@@ -29,6 +33,8 @@ import {
   periodKey,
   speedMultiplierForLevel,
 } from './escalation-manager';
+import { syncProgress } from './progress';
+import { Serial } from './serial';
 import { verifyClosable, type TabInfo, type TabsPort } from './tab-manager';
 
 export interface Clock {
@@ -44,6 +50,8 @@ export interface ManagerDeps {
   scheduleBackup?: (tabId: number, dueAt: number | null) => void;
   /** Called when pause/enabled state changes (badge, alarms). */
   onPauseChanged?: (pause: PauseState | null) => void;
+  /** Lock shared with the focus manager (a private one is created if omitted). */
+  serial?: Serial;
 }
 
 interface Ctx {
@@ -51,8 +59,12 @@ interface Ctx {
   settings: Settings;
   pause: PauseState | null;
   watching: boolean;
+  /** A break is running and the user chose to relax interceptions during breaks. */
+  relaxing: boolean;
+  focus: FocusState;
+  inventory: Inventory;
   tabs: Record<string, TabRecord>;
-  session: FocusSession;
+  session: WatchSession;
   outbox: Map<number, TabSync>;
 }
 
@@ -71,19 +83,18 @@ export class DistractionManager {
   private readonly tabs: TabsPort;
   private readonly clock: Clock;
   private readonly newId: () => string;
-  private chain: Promise<unknown> = Promise.resolve();
+  private readonly lock: Serial;
 
   constructor(private readonly deps: ManagerDeps) {
     this.store = deps.store;
     this.tabs = deps.tabs;
     this.clock = deps.clock ?? { now: () => Date.now() };
     this.newId = deps.newId ?? (() => crypto.randomUUID());
+    this.lock = deps.serial ?? new Serial();
   }
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(fn, fn);
-    this.chain = run.catch(() => undefined);
-    return run;
+    return this.lock.run(fn);
   }
 
   // ---------------------------------------------------------------------------
@@ -91,14 +102,24 @@ export class DistractionManager {
 
   private async load(): Promise<Ctx> {
     const now = this.clock.now();
-    const [settings, tabs] = await Promise.all([this.store.getSettings(), this.store.getTabs()]);
+    const [settings, tabs, focus, inventory] = await Promise.all([
+      this.store.getSettings(),
+      this.store.getTabs(),
+      this.store.getFocus(),
+      this.store.getInventory(),
+    ]);
     const pause = await this.activePause(now);
     const session = await this.ensureSession(now);
+    const onBreak = focus.current !== null && focus.current.kind !== 'focus';
+    const relaxing = onBreak && settings.focus.relaxDuringBreaks;
     return {
       now,
       settings,
       pause,
-      watching: settings.enabled && pause === null,
+      watching: settings.enabled && pause === null && !relaxing,
+      relaxing,
+      focus,
+      inventory,
       tabs,
       session,
       outbox: new Map(),
@@ -122,24 +143,25 @@ export class DistractionManager {
     if (sessionPause) return sessionPause;
     const pause = await this.store.getPause();
     if (pause && pause.until !== null && pause.until <= now) {
-      // A timed pause ran out: clear it and begin a fresh focus session.
+      // A timed pause ran out: clear it and begin a fresh watch session.
       await this.store.setPause(null);
-      await this.startFocusSession(now);
+      await this.startWatchSession(now);
       this.deps.onPauseChanged?.(null);
       return null;
     }
     return pause;
   }
 
-  private async ensureSession(now: number): Promise<FocusSession> {
-    return (await this.store.getFocusSession()) ?? this.startFocusSession(now);
+  private async ensureSession(now: number): Promise<WatchSession> {
+    return (await this.store.getWatchSession()) ?? this.startWatchSession(now);
   }
 
-  private async startFocusSession(now: number): Promise<FocusSession> {
-    const session: FocusSession = { id: this.newId(), startedAt: now, intercepted: 0 };
-    await this.store.setFocusSession(session);
+  /** Browser start or resume from pause: a new escalation "session" begins. */
+  private async startWatchSession(now: number): Promise<WatchSession> {
+    const session: WatchSession = { id: this.newId(), startedAt: now, intercepted: 0 };
+    await this.store.setWatchSession(session);
     const stats = touchDay(await this.store.getStats(), now);
-    stats.totalFocusSessions += 1;
+    stats.totalWatchSessions += 1;
     await this.store.setStats(pruneStats(stats, now));
     return session;
   }
@@ -170,7 +192,12 @@ export class DistractionManager {
         const site = this.site(ctx, rec);
         return {
           mode: 'appear',
-          plan: buildPlan(rec.level, ctx.settings, site?.name ?? 'This site'),
+          plan: buildPlan(rec.level, ctx.settings, site?.name ?? 'This site', {
+            color: effectiveColor(ctx.settings, ctx.inventory),
+            cosmetics: effectiveEquipped(ctx.inventory),
+            focusActive:
+              ctx.focus.current?.kind === 'focus' && ctx.focus.current.status === 'running',
+          }),
         };
       }
       case 'counting':
@@ -379,10 +406,11 @@ export class DistractionManager {
       rec.level = esc.level;
 
       await this.store.setStats(bumpDay(await this.store.getStats(), ctx.now, 'intercepted'));
-      await this.store.setFocusSession({
+      await this.store.setWatchSession({
         ...ctx.session,
         intercepted: ctx.session.intercepted + 1,
       });
+      await syncProgress(this.store, ctx.now);
 
       if (source === 'backup') this.push(ctx, rec, tabId);
       await this.commit(ctx);
@@ -531,7 +559,7 @@ export class DistractionManager {
       const wasPaused = (await this.store.getPause()) ?? (await this.store.getSessionPause());
       await this.store.setPause(null);
       await this.store.setSessionPause(null);
-      if (wasPaused) await this.startFocusSession(now);
+      if (wasPaused) await this.startWatchSession(now);
       const ctx = await this.load();
       await this.resyncInner(ctx);
       await this.commit(ctx);
@@ -609,12 +637,15 @@ export class DistractionManager {
   }
 
   private async statusInner(ctx: Ctx): Promise<StatusSnapshot> {
-    const [stats, last, esc, active] = await Promise.all([
+    const [stats, last, esc, active, achievements, unseen] = await Promise.all([
       this.store.getStats(),
       this.store.getLastClosed(),
       this.escalation(ctx),
       this.tabs.getActiveTab(),
+      this.store.getAchievements(),
+      this.store.getUnseenUnlocks(),
     ]);
+    const fc = ctx.focus.current;
     const rec = active ? ctx.tabs[key(active.id)] : undefined;
     const site = rec ? this.site(ctx, rec) : undefined;
     const { behavior } = ctx.settings;
@@ -624,9 +655,9 @@ export class DistractionManager {
       onboardingComplete: ctx.settings.onboardingComplete,
       defaultPause: ctx.settings.defaultPause,
       pause: ctx.pause,
+      relaxing: ctx.relaxing,
       today: todayStats(stats, ctx.now),
-      streak: computeStreak(stats, ctx.now),
-      totalFocusSessions: stats.totalFocusSessions,
+      streak: focusStreak(stats, ctx.now),
       session: ctx.session,
       escalation: {
         enabled: behavior.escalationEnabled,
@@ -635,9 +666,35 @@ export class DistractionManager {
         nextSpeedMultiplier: speedMultiplierForLevel(esc.level, behavior),
         resetFrequency: behavior.resetFrequency,
       },
-      activeTab: rec && site ? { siteName: site.name, phase: rec.phase, dueAt: dueAt(rec) } : null,
+      activeTab:
+        rec && site
+          ? {
+              siteId: site.id,
+              siteName: site.name,
+              phase: rec.phase,
+              dueAt: dueAt(rec),
+              delaySeconds: siteDelaySeconds(ctx.settings, site),
+            }
+          : null,
       lastClosed: last && ctx.now - last.closedAt <= REOPEN_WINDOW_MS ? last : null,
-      character: ctx.settings.character,
+      character: { ...ctx.settings.character, color: effectiveColor(ctx.settings, ctx.inventory) },
+      cosmetics: effectiveEquipped(ctx.inventory),
+      focus: fc
+        ? {
+            kind: fc.kind,
+            status: fc.status,
+            endsAt: fc.endsAt,
+            remainingMs:
+              fc.status === 'running'
+                ? Math.max(0, (fc.endsAt ?? ctx.now) - ctx.now)
+                : fc.remainingMs,
+          }
+        : null,
+      achievements: {
+        unlocked: Object.keys(achievements).length,
+        total: ACHIEVEMENTS.length,
+        unseen: unseen.length,
+      },
     };
   }
 }

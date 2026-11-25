@@ -1,6 +1,6 @@
 {
   "name": "tablin",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Tablin is a tiny animated companion that walks over and closes your distracting tabs.",
   "type": "module",
@@ -21,7 +21,8 @@
     "format": "prettier --write .",
     "icons": "node scripts/generate-icons.mjs",
     "package": "npm run build && node scripts/package.mjs",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "test:upgrade": "node tests/e2e/upgrade-e2e.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

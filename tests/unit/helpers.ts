@@ -124,3 +124,62 @@ export async function harness(patch: (s: Settings) => Settings = (s) => s): Prom
 export const YT = 'https://www.youtube.com/watch?v=abc';
 export const REDDIT = 'https://www.reddit.com/r/all';
 export const DOCS = 'https://docs.google.com/document/d/1';
+
+import { FocusManager } from '../../src/background/focus-manager';
+import { Serial } from '../../src/background/serial';
+import type { FocusHistoryEntry, UnlockEvent } from '../../src/shared/types';
+
+export interface FocusHarness extends Harness {
+  focus: FocusManager;
+  serial: Serial;
+  ended: { entry: FocusHistoryEntry; unlocks: UnlockEvent[] }[];
+  alarms: (number | null)[];
+  restartFocus(): FocusManager;
+}
+
+/** Harness with distraction + focus managers sharing one lock, like the real worker. */
+export async function focusHarness(
+  patch: (s: Settings) => Settings = (s) => s,
+): Promise<FocusHarness> {
+  const base = await harness(patch);
+  const serial = new Serial();
+  const ended: FocusHarness['ended'] = [];
+  const alarms: (number | null)[] = [];
+  let n = 0;
+  const makeFocus = () =>
+    new FocusManager({
+      store: base.store,
+      clock: base.clock,
+      serial,
+      newId: () => `focus-${++n}`,
+      scheduleEnd: (t) => alarms.push(t),
+      onSessionEnd: (entry, unlocks) => ended.push({ entry, unlocks }),
+    });
+  const makeDistraction = () =>
+    new DistractionManager({
+      store: base.store,
+      tabs: base.tabs,
+      clock: base.clock,
+      serial,
+      newId: () => `w-${++n}`,
+    });
+  const h: FocusHarness = {
+    ...base,
+    serial,
+    ended,
+    alarms,
+    focus: makeFocus(),
+    manager: makeDistraction(),
+    restart() {
+      h.manager = makeDistraction();
+      return h.manager;
+    },
+    restartFocus() {
+      h.focus = makeFocus();
+      return h.focus;
+    },
+  };
+  return h;
+}
+
+export const MIN = 60_000;
