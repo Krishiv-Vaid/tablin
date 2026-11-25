@@ -95,7 +95,8 @@ network requests.
 - Pulling farther and holding longer both build momentum. The drag distance is capped.
 - On release it launches toward the exit on an underdamped spring. Speed is bounded.
 - Press <kbd>Esc</kbd> while dragging to cancel the drag. A small pull just drops it back.
-- Releasing never closes the tab. A visible 3-second cancel window always comes first.
+- Releasing never closes the tab by itself: the character still flies to the X, and the close
+  goes through the same close timer and safety checks as walking there.
 
 **Escalation**
 
@@ -166,8 +167,10 @@ achievements unlock right away.
 4. When it arrives it reaches up and presses the button:
    - **Nudge mode:** it asks whether to close the tab, offering **Close tab** or **5 more minutes**.
      If you ignore it, it dozes off in the corner.
-   - **Auto-close:** a 3-second countdown with **Keep this tab** (or <kbd>Esc</kbd>), then the
-     worker verifies everything and closes that exact tab.
+   - **Auto-close:** it clicks the X and the worker verifies everything and closes that exact tab.
+     The **Close timer** setting (General → Close timer, 0–10 s, default 0 = instant) adds a
+     countdown at the X with **Keep this tab** (or <kbd>Esc</kbd>) if you want time to cancel.
+     Grab the character or press <kbd>Esc</kbd> on the way to stop it.
 
 The content script never closes anything itself. It only reports page events and asks. All
 decisions and the actual `chrome.tabs.remove` call happen in the background worker.

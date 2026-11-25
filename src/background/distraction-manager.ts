@@ -652,6 +652,7 @@ export class DistractionManager {
     return {
       enabled: ctx.settings.enabled,
       autoClose: ctx.settings.autoClose,
+      closeTimerSeconds: ctx.settings.closeTimerSeconds,
       onboardingComplete: ctx.settings.onboardingComplete,
       defaultPause: ctx.settings.defaultPause,
       pause: ctx.pause,

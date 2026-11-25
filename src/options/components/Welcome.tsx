@@ -149,9 +149,9 @@ export function Welcome(props: { settings: Settings; update: SettingsUpdater; on
               <button type="button" className="mode-choice" onClick={() => void finish(true)}>
                 <span className="mode-title">Auto-close</span>
                 <span className="row-desc">
-                  When {name} reaches the corner, you get a 3-second countdown to keep the tab, then
-                  it closes. Pinned tabs, tabs playing audio and tabs with typed text are left
-                  alone, and you can reopen what was closed.
+                  {name} walks to the corner and clicks the X. You can grab {name} or press Esc on
+                  the way, and add a wait at the X in Settings. Pinned tabs, tabs playing audio and
+                  tabs with typed text are left alone, and you can reopen what was closed.
                 </span>
               </button>
             </div>

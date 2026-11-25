@@ -1,4 +1,9 @@
-import { DELAY_MAX_SECONDS, DELAY_MIN_SECONDS } from '../../shared/constants';
+import {
+  CLOSE_TIMER_MAX_SECONDS,
+  CLOSE_TIMER_MIN_SECONDS,
+  DELAY_MAX_SECONDS,
+  DELAY_MIN_SECONDS,
+} from '../../shared/constants';
 import type { Settings } from '../../shared/types';
 import { Row, Segmented, Slider, Toggle } from '../../ui/components/controls';
 import { Section, type SettingsUpdater } from './Section';
@@ -25,7 +30,9 @@ export function GeneralSection({
           title="Auto-close tabs"
           desc={
             settings.autoClose
-              ? 'On: after a 3-second countdown you can cancel, the tab closes.'
+              ? settings.closeTimerSeconds > 0
+                ? `On: ${name} reaches the X and waits ${settings.closeTimerSeconds}s (you can cancel), then the tab closes.`
+                : `On: ${name} walks over and clicks the X straight away.`
               : `Off (nudge mode): ${name} reminds you but never closes anything.`
           }
         >
@@ -33,6 +40,24 @@ export function GeneralSection({
             checked={settings.autoClose}
             label="Auto-close tabs"
             onChange={(autoClose) => void update((s) => ({ ...s, autoClose }))}
+          />
+        </Row>
+        <Row
+          title="Close timer"
+          desc={
+            settings.autoClose
+              ? `How long ${name} waits with a hand on the X before closing. 0s = clicks it right away.`
+              : 'Used when auto-close is on: how long to wait at the X before closing.'
+          }
+        >
+          <Slider
+            value={settings.closeTimerSeconds}
+            min={CLOSE_TIMER_MIN_SECONDS}
+            max={CLOSE_TIMER_MAX_SECONDS}
+            step={1}
+            label="Close timer in seconds"
+            format={(v) => (v === 0 ? 'Instant' : `${v}s`)}
+            onChange={(closeTimerSeconds) => void update((s) => ({ ...s, closeTimerSeconds }))}
           />
         </Row>
         <Row

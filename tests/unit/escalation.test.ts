@@ -88,5 +88,7 @@ describe('escalation', () => {
       speedMultiplier: s.behavior.maxSpeedMultiplier,
     });
     expect(plans[0]!.autoClose).toBe(false);
+    expect(plans[0]!.closeTimerSeconds).toBe(0);
+    expect(buildPlan(1, { ...s, closeTimerSeconds: 4 }, 'YouTube').closeTimerSeconds).toBe(4);
   });
 });

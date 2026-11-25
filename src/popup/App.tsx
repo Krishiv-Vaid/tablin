@@ -184,7 +184,9 @@ export function App() {
                 <span className="row-title">Auto-close tabs</span>
                 <span className="row-desc">
                   {status.autoClose
-                    ? `${status.character.name} closes the tab after a 3-second countdown.`
+                    ? status.closeTimerSeconds > 0
+                      ? `${status.character.name} closes the tab after a ${status.closeTimerSeconds}-second countdown.`
+                      : `${status.character.name} walks over and closes the tab.`
                     : `${status.character.name} only reminds you. Nothing gets closed.`}
                 </span>
               </div>

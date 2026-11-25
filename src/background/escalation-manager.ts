@@ -123,6 +123,7 @@ export function buildPlan(
     mood: behavior.escalationEnabled ? moodForLevel(level) : 'casual',
     message: levelMessage ?? (focusActive ? `You're mid-focus! ${character.name} is on it.` : null),
     autoClose: settings.autoClose,
+    closeTimerSeconds: settings.closeTimerSeconds,
     siteName,
     character: { ...character, color: extras.color ?? character.color },
     cosmetics: { ...(extras.cosmetics ?? EMPTY_EQUIPPED) },
